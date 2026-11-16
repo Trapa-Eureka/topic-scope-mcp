@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.topicscope</groupId>
+    <artifactId>topic-scope-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>topic-scope-server</artifactId>
+  <name>Topic Scope Server</name>
+  <description>The read-only MCP server. Nothing in this module may publish to, or otherwise change, a broker.</description>
+
+  <dependencyManagement>
+    <dependencies>
+      <!-- Versions pinned in the parent (Kafka client, JUnit, Testcontainers) win over these two. -->
+      <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-dependencies</artifactId>
+        <version>${spring-boot.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.springframework.ai</groupId>
+        <artifactId>spring-ai-bom</artifactId>
+        <version>${spring-ai.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <dependencies>
+    <!-- MCP over stdio. No web server is started. -->
+    <dependency>
+      <groupId>org.springframework.ai</groupId>
+      <artifactId>spring-ai-starter-mcp-server</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.kafka</groupId>
+      <artifactId>kafka-clients</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.paho</groupId>
+      <artifactId>org.eclipse.paho.client.mqttv3</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.tngtech.archunit</groupId>
+      <artifactId>archunit</artifactId>
+      <version>${archunit.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <!-- The demo data and its seeder: tests compare the server's answers against DemoData. Tests only. -->
+    <dependency>
+      <groupId>io.topicscope</groupId>
+      <artifactId>topic-scope-simulator</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-kafka</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <configuration>
+          <parameters>true</parameters>
+        </configuration>
+      </plugin>
+      <!-- Makes the jar runnable: java -jar server/target/topic-scope-server-<version>.jar -->
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+        <version>${spring-boot.version}</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>repackage</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <configuration>
+          <!-- The repackaged jar keeps classes under BOOT-INF; integration tests need the plain ones. -->
+          <classesDirectory>${project.build.outputDirectory}</classesDirectory>
+          <systemPropertyVariables>
+            <topicscope.server.jar>${project.build.directory}/${project.build.finalName}.jar</topicscope.server.jar>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

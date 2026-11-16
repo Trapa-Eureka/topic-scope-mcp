@@ -1,0 +1,35 @@
+spring:
+  application:
+    name: topic-scope
+  main:
+    # MCP runs over stdin/stdout. Anything else printed to stdout breaks the protocol.
+    banner-mode: off
+    web-application-type: none
+  ai:
+    mcp:
+      server:
+        stdio: true
+        name: topic-scope
+        version: 0.1.0
+        type: SYNC
+        instructions: >-
+          Read-only view of Kafka and MQTT brokers: topics, recent messages and lag.
+          Nothing here can publish, commit offsets or change a broker.
+          Start with list_sources to see which brokers are configured.
+        capabilities:
+          resource: false
+          prompt: false
+          completion: false
+
+# The brokers the server may look at. These defaults are the local stack from compose.yaml.
+# To look elsewhere, put your own list in a file and start the server with
+#   --spring.config.additional-location=file:/path/to/topic-scope.yml
+topic-scope:
+  probe-timeout: 5s
+  sources:
+    - name: local-kafka
+      type: kafka
+      address: ${TOPIC_SCOPE_KAFKA:localhost:9092}
+    - name: local-mqtt
+      type: mqtt
+      address: ${TOPIC_SCOPE_MQTT:tcp://localhost:1883}

@@ -11,6 +11,8 @@ A read-only MCP server (Java 21, Spring Boot, Spring AI MCP) that shows an AI as
 - **A feature is done when its check passes**, not when the code is written. Mark it Done in the README only then, and say so plainly when something was not tried.
 - All files are in English, except `docs/*.ko.md`.
 
+- **Nothing prints to stdout in the server.** It carries the MCP protocol; logs go to stderr.
+
 The first two are enforced by `.claude/hooks/block-dangerous.mjs`. If it blocks you, do not work around it; ask.
 
 ## Commands
@@ -22,7 +24,7 @@ The first two are enforced by `.claude/hooks/block-dangerous.mjs`. If it blocks 
 ## Layout
 
 - `simulator/` — seeds and feeds the local brokers. The only module that may publish. `DemoData.java` is the single source of the demo data; tests compare against its constants
-- `server/` — the MCP server (from Phase 2)
+- `server/` — the MCP server. Broker access only in `kafka/` and `mqtt/`; `tools/` stays thin. `ReadOnlyArchitectureTest` fails the build on any broker-client call outside its allow lists
 
 ## Procedures
 
@@ -30,3 +32,4 @@ Kept as skills in `.claude/skills/`, loaded only when needed:
 
 - `phase` — how a roadmap phase is started, checked and handed over
 - `local-stack` — run, reset and cross-check the local brokers; what a seeded stack holds
+- `add-tool` — where a tool's code goes, the annotations and tests every tool needs, pitfalls of the packaged jar, talking to the server by hand

@@ -9,7 +9,8 @@ COPY .mvn .mvn
 COPY simulator/pom.xml simulator/pom.xml
 COPY simulator/src/main simulator/src/main
 # Tests are run by ./mvnw verify on the host; the image only needs the jar. Maven's downloads are cached between builds.
-RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -q -pl simulator -DskipTests package \
+# -f builds this module alone (it still reads the parent pom); the other modules are not in the image.
+RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -q -f simulator/pom.xml -DskipTests package \
     && cp simulator/target/topic-scope-simulator-*-all.jar /simulator.jar
 
 FROM eclipse-temurin:21-jre

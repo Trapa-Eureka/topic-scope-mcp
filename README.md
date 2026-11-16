@@ -2,8 +2,8 @@
 
 A **read-only** MCP server that lets an AI assistant look inside Kafka and MQTT brokers: which topics exist, what the latest messages are, and whether consumers are keeping up.
 
-> **Status: Phases 0 and 1 of 9 done. No tool works yet.**
-> What exists: the development harness (safety hook, Maven wrapper, agent guidance) and a [local stack](#local-stack-and-demo-data) of Kafka and Mosquitto filled with demo data whose topics, messages and lag are known in advance. The MCP server itself starts in Phase 2. Every feature below is marked **Planned** until it has a test that proves it.
+> **Status: Phases 0 to 2 of 9 done. The server runs and has one tool, `list_sources`.**
+> What exists: the MCP server skeleton (it starts, an MCP client can connect, and it reports whether each configured broker answers), a build that fails if server code could change a broker, and a [local stack](#local-stack-and-demo-data) of Kafka and Mosquitto with demo data known in advance. Topics, messages and lag come in Phases 3 to 6. Every feature below is marked **Planned** until it has a test that proves it.
 
 **Jump to:** [What it shows](#what-it-shows) · [Tools](#tools) · [Safety](#safety) · [Roadmap](#roadmap) · [Installation](#installation)
 
@@ -72,7 +72,7 @@ The numbers above are an illustration of the layout, not output from a real run.
 
 | Tool | What it returns | Status |
 |---|---|---|
-| `list_sources` | the configured brokers and whether each one answers | Planned |
+| `list_sources` | the configured brokers and whether each one answers: name, type, address, reachable, detail (what the broker says about itself, or why it could not be reached), response time | Done |
 | `list_topics` | [topic list](#1-topic-list) for one source, with a name filter | Planned |
 | `describe_topic` | one Kafka topic in detail: partitions, leaders, replicas, offsets, retention settings | Planned |
 | `recent_messages` | [recent messages](#2-recent-messages) of one topic | Planned |
@@ -80,7 +80,9 @@ The numbers above are an illustration of the layout, not output from a real run.
 | `consumer_lag` | [lag](#3-lag) of one Kafka consumer group, sampled twice | Planned |
 | `topic_freshness` | [freshness](#3-lag) of Kafka or MQTT topics against an expected interval | Planned |
 
-There is no tool that writes. See [Safety](#safety).
+There is no tool that writes. Every tool is announced to the client as read-only (`readOnlyHint`), and a test checks that for all of them. See [Safety](#safety).
+
+A broker that does not answer is a result, not an error: `list_sources` then shows `reachable: false` and the reason, within the timeout (5 seconds by default).
 
 ## Safety
 
@@ -96,6 +98,8 @@ Rules that matter are enforced by a mechanism and a test, not by a sentence in a
 | Do not overload a broker | One short-lived connection per call, timeouts on every call |
 | Leave a trail | Every tool call is appended to a local audit log: time, tool, source, topic. Never the payload |
 
+What is in place today: the first three rows. [`ReadOnlyArchitectureTest`](server/src/test/java/io/topicscope/ReadOnlyArchitectureTest.java) reads the compiled server and fails the build when it calls a broker-client method outside a short allow list of read methods (list, describe, assign, seek, poll, subscribe on MQTT). Each rule is also run against a deliberately bad class, to prove the rule can fail. The other rows come with the tools they protect (Phases 4 to 7).
+
 On the broker side, give the server an account that only has read permissions (Kafka ACLs: `Describe`, `DescribeConfigs`, `Read`; MQTT ACL: subscribe only). The server's own rules are the second line of defence, not the first.
 
 ## Requirements
@@ -109,15 +113,54 @@ Maven is not needed. The repository ships the Maven wrapper (`./mvnw`), which do
 
 ## Installation
 
-The server is not available yet (Phase 2). What works today is the local stack:
+There is no release yet. Build from source:
 
 ```bash
 git clone https://github.com/Trapa-Eureka/topic-scope-mcp.git
 cd topic-scope-mcp
+./mvnw -DskipTests install            # builds server/target/topic-scope-server-0.1.0-SNAPSHOT.jar
 docker compose up -d --build --wait   # Kafka on localhost:9092, Mosquitto on localhost:1883, demo data, sample traffic
 ```
 
-The first run builds the simulator image and downloads its dependencies, which takes a few minutes. Registering the server with an MCP client is written here when Phase 2 is done and has been tried.
+The first run downloads dependencies and builds the simulator image, which takes a few minutes.
+
+### Connect an MCP client
+
+The server speaks MCP over stdin/stdout: the client starts it as a child process, and it exits when the client closes the pipe.
+
+```
+command: java
+args:    -jar /absolute/path/to/topic-scope-mcp/server/target/topic-scope-server-0.1.0-SNAPSHOT.jar
+```
+
+For Claude Code, the repository ships a project-level [`.mcp.json`](.mcp.json) with exactly this (relative path, so start Claude Code in the repository folder and approve the server when asked). Then ask "which brokers can you see?".
+
+So far this has been tried with the MCP Java SDK client (the end-to-end test `McpServerIT`) and with raw JSON-RPC over a pipe. It has **not** been tried inside Claude Code or Claude Desktop yet.
+
+### Configuration
+
+Out of the box the server looks at the local stack. Two environment variables move it:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `TOPIC_SCOPE_KAFKA` | `localhost:9092` | bootstrap servers of the source `local-kafka` |
+| `TOPIC_SCOPE_MQTT` | `tcp://localhost:1883` | URI of the source `local-mqtt` |
+
+For other names or more brokers, write your own list and pass it with `--spring.config.additional-location=file:/path/to/topic-scope.yml`:
+
+```yaml
+topic-scope:
+  probe-timeout: 5s
+  sources:
+    - name: tower-kafka
+      type: kafka
+      address: broker-1:9092,broker-2:9092
+    - name: field-mqtt
+      type: mqtt
+      address: tcp://mqtt-host:1883
+```
+
+Brokers that need a login or TLS are not supported yet (Phase 7).
 
 ### Develop this repository
 
@@ -182,7 +225,7 @@ It is a safety net, not a complete defense. It matches command text and the text
 
 ## Project layout
 
-`server/`, `board/` and `docs/` do not exist yet.
+`board/` and `docs/` do not exist yet. In `server/`, the `safety/` package comes with Phase 4.
 
 ```
 topic-scope-mcp/
@@ -200,7 +243,8 @@ topic-scope-mcp/
 ├── .claude/
 │   ├── settings.json
 │   ├── hooks/     # blocks dangerous commands, secrets and broker write APIs before they run
-│   └── skills/    # procedures used only sometimes: how one phase is worked, how the local stack is run and checked
+│   └── skills/    # procedures used only sometimes: how one phase is worked, how the local stack is run and checked, how a tool is added
+├── .mcp.json      # registers the built server with Claude Code for this folder
 ├── pom.xml        # Maven parent: versions and test setup for all modules
 ├── mvnw, .mvn/    # Maven wrapper
 └── CLAUDE.md      # a few lines that apply to every task
@@ -212,7 +256,7 @@ Each phase ends with something that can be run and checked. A phase is done when
 
 - [x] **Phase 0 — Harness and intent.** Git ignore rules, Maven wrapper, a short `CLAUDE.md`, a blocking hook with tests, a skill for how a phase is worked, this README as the specification. *Check: the hook tests pass.*
 - [x] **Phase 1 — Local, deterministic brokers.** `compose.yaml` with Kafka and Mosquitto, the simulator with fixed sample data, a slow consumer that produces a known lag, Testcontainers wiring. *Check: one command brings up brokers whose topics, messages and lag are known in advance.* (Checked by `SeededStackIT`, and by hand against the compose stack with Kafka's own command-line tools.)
-- [ ] **Phase 2 — MCP server skeleton.** Spring Boot + Spring AI MCP server over stdio, source configuration, `list_sources`, the architecture test that forbids publishing. *Check: an MCP client lists the tools and `list_sources` reports both brokers.*
+- [x] **Phase 2 — MCP server skeleton.** Spring Boot 4.1 + Spring AI 2.0 MCP server over stdio, source configuration, `list_sources`, the architecture test that forbids publishing. *Check: an MCP client lists the tools and `list_sources` reports both brokers.* (Checked by `McpServerIT`: the packaged jar, started as a child process, against real brokers.)
 - [ ] **Phase 3 — Kafka topic list.** `list_topics`, `describe_topic`. *Check: the result matches the topics the simulator created.*
 - [ ] **Phase 4 — Kafka recent messages.** `recent_messages` with positional reads, value formatting, caps and redaction. *Check: the last N records match what was published, and no consumer group appears on the broker afterwards.*
 - [ ] **Phase 5 — Kafka lag.** `list_consumer_groups`, `consumer_lag` with two samples and a status. *Check: the slow consumer is reported as `LAGGING`, a stopped one as `STALLED`.*

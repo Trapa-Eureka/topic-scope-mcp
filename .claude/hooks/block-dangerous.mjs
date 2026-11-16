@@ -36,7 +36,7 @@ export const SERVER_WRITE_APIS = [
   { why: "Kafka offset commit (the server never moves a consumer group)", re: /\b(?:commitSync|commitAsync|alterConsumerGroupOffsets|deleteConsumerGroupOffsets)\b/ },
   { why: "Kafka group subscription (read with assign + seek, never subscribe)", re: /\bKafkaConsumer\b[\s\S]*\.subscribe\s*\(|\bConsumerConfig\.GROUP_ID_CONFIG\b|["']group\.id["']/ },
   { why: "Kafka admin write (create/delete/alter)", re: /\b(?:createTopics|deleteTopics|deleteRecords|deleteConsumerGroups|createPartitions|alterConfigs|incrementalAlterConfigs|createAcls|deleteAcls)\b/ },
-  { why: "MQTT publish (the server only subscribes)", re: /\.publish(?:With)?\s*\(|\bMqttMessage\b|\bMqtt[35]Publish\b|\bwillPublish\b|\bsetWill\b/ },
+  { why: "MQTT publish (the server only subscribes)", re: /\.publish(?:With)?\s*\(|\bnew\s+MqttMessage\b|\bMqtt[35]Publish\b|\bwillPublish\b|\bsetWill\b/ },
 ];
 
 // ---------- 4) Dangerous shell command patterns ----------

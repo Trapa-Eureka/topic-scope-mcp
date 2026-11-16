@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Everything goes to stderr. stdout belongs to the MCP protocol. -->
+<configuration>
+  <appender name="STDERR" class="ch.qos.logback.core.ConsoleAppender">
+    <target>System.err</target>
+    <encoder>
+      <pattern>%d{HH:mm:ss.SSS} %-5level %logger{30} - %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <!-- The Kafka client logs every connection attempt; an unreachable broker is reported by the tool instead. -->
+  <logger name="org.apache.kafka" level="ERROR"/>
+
+  <!-- Spring AI's MCP annotation scanner triggers two "not eligible for getting processed by all BeanPostProcessors"
+       warnings on every start. They come from the framework's own beans and nothing here can act on them. -->
+  <logger name="org.springframework.context.support.PostProcessorRegistrationDelegate" level="ERROR"/>
+
+  <root level="WARN">
+    <appender-ref ref="STDERR"/>
+  </root>
+</configuration>

@@ -175,6 +175,7 @@ test("allows read APIs in the server, and write APIs outside it", () => {
     "admin.listTopics().names().get(); admin.describeTopics(names); admin.listConsumerGroupOffsets(group);",
     "admin.listOffsets(Map.of(tp, OffsetSpec.latest())); admin.describeConsumerGroups(groups);",
     'mqtt.subscribe("#", 0); // MQTT has to subscribe to see anything',
+    "public void messageArrived(String topic, MqttMessage message) { seen.add(topic); } // receiving is reading",
     "props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);",
     "// Published records are read back, never produced, by this class.",
   ];
