@@ -444,7 +444,7 @@ It is a safety net, not a complete defense. It matches command text and the text
 
 - **Only Apache Kafka 4.3 and Mosquitto 2.0 have been tried**, in Docker, on macOS. Other brokers, other versions and Windows have not.
 - **TLS, SCRAM and `ssl://` to brokers are untested against a real broker.** They are passed on to the client libraries as configured. What has been tried is SASL/PLAIN on Kafka and user name with password on MQTT.
-- **Only Claude Code has been tried as an MCP client**, over stdin/stdout. HTTP mode has been tried with the MCP Java SDK's client and with `curl`, not with an assistant.
+- **Only Claude Code has been tried as an MCP client**, over stdin/stdout and over HTTP (how, and with which version, is in the [usage guide](docs/usage.md#claude-code-1)). Claude Desktop and other clients have not.
 - **HTTP mode has one shared token and no encryption.** It is not user authentication. Use it on one machine or behind a reverse proxy that does TLS.
 - **The status board has no login** and is meant for one machine. Its page is checked by eye, not by a browser test.
 - **Redaction is a guess** in both directions. Treat what the tools return as sensitive, and remember that it goes to the AI model your client uses.

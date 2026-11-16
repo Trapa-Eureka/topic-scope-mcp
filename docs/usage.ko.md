@@ -100,6 +100,26 @@ java -jar server/target/topic-scope-server-0.1.0.jar --spring.profiles.active=ht
 
 클라이언트는 모든 요청에 `Authorization: Bearer <토큰>`을 보냅니다. 없거나 틀리면 401로 응답합니다. 웹 페이지에서 온 요청(`Origin` 헤더가 있는 요청)은 그 출처가 `TOPIC_SCOPE_HTTP_ALLOWED_ORIGINS`에 없으면 403으로 거부합니다.
 
+### Claude Code
+
+HTTP 서버는 주소와 보낼 헤더로 등록합니다.
+
+```json
+{
+  "mcpServers": {
+    "topic-scope": {
+      "type": "http",
+      "url": "http://127.0.0.1:8091/mcp",
+      "headers": { "Authorization": "Bearer <토큰>" }
+    }
+  }
+}
+```
+
+이 파일에는 토큰이 들어가므로 버전 관리에 넣지 마십시오. 프로젝트의 `.mcp.json`으로 쓰거나, `claude --mcp-config /path/to/that-file.json`으로 한 세션에만 쓸 수 있습니다.
+
+Claude Code 2.1.325에서 이 파일을 `--mcp-config`로 넘겨 확인했습니다. 서버가 연결됨으로 표시되고 도구 일곱 개가 보이며, `list_sources`, `consumer_lag`, `topic_freshness`를 호출해 응답을 받았고, 호출마다 서버의 감사 로그에 한 줄씩 남았습니다. 파일의 토큰이 틀리면 서버가 실패로 표시되고 도구가 제공되지 않습니다.
+
 이미지로 실행:
 
 ```bash
@@ -122,7 +142,7 @@ docker run -d --rm --network topic-scope_default -p 127.0.0.1:8091:8091 \
 - 토큰은 공유 비밀값 하나이고, 사용자 계정이 아닙니다. 토큰을 가진 사람은 모두 같은 것을 보고, 감사 로그로는 누구였는지 구분할 수 없습니다.
 - **연결은 암호화되지 않습니다.** 토큰과 도구가 돌려주는 내용이 평문으로 오갑니다. 한 컴퓨터 안에서는 괜찮지만, 그 밖으로 나간다면 TLS를 처리하는 리버스 프록시를 앞에 두거나 이 모드를 쓰지 마십시오.
 - 기본으로는 이 컴퓨터에서만 수신합니다. 이미지는 컨테이너의 모든 인터페이스에서 수신하므로, 누가 접근할 수 있는지는 포트를 어디에 공개하느냐로 정해집니다. `-p 127.0.0.1:8091:8091`이면 로컬 전용입니다.
-- MCP Java SDK의 Streamable HTTP 클라이언트(테스트 `HttpIT`)와 `curl`로 확인했습니다. Claude Code나 Claude Desktop을 클라이언트로 쓰는 것은 해 보지 않았습니다.
+- Claude Code(위 참고), MCP Java SDK의 Streamable HTTP 클라이언트(테스트 `HttpIT`), `curl`로 확인했습니다. Claude Desktop으로는 해 보지 않았습니다.
 
 ## 상태판
 

@@ -4,6 +4,12 @@ All notable changes to this project are written here. The format follows [Keep a
 
 Until 1.0.0 the names of tools, arguments, result fields and settings may still change between minor versions; such changes are listed under **Changed**.
 
+## [Unreleased]
+
+### Changed
+
+- Documentation only: HTTP mode has now been tried with Claude Code 2.1.325 as the client (connected, seven tools, three tool calls answered; refused with a wrong token). The usage guide shows the configuration. The 0.1.0 notes below still say it had not been tried, which was true when 0.1.0 was released.
+
 ## [0.1.0] - 2026-11-16
 
 The first release. A read-only MCP server that lets an AI assistant look inside Kafka and MQTT brokers, with a web status board and a local stack to try it on.

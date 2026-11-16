@@ -100,6 +100,26 @@ java -jar server/target/topic-scope-server-0.1.0.jar --spring.profiles.active=ht
 
 A client sends `Authorization: Bearer <token>` with every request. Without it, or with a wrong one, the answer is 401. A request that comes from a web page (it carries an `Origin` header) is refused with 403 unless that origin is listed in `TOPIC_SCOPE_HTTP_ALLOWED_ORIGINS`.
 
+### Claude Code
+
+An HTTP server is registered with its address and the header to send:
+
+```json
+{
+  "mcpServers": {
+    "topic-scope": {
+      "type": "http",
+      "url": "http://127.0.0.1:8091/mcp",
+      "headers": { "Authorization": "Bearer <the token>" }
+    }
+  }
+}
+```
+
+This file now holds the token: keep it out of version control. It works as a project's `.mcp.json`, or for one session with `claude --mcp-config /path/to/that-file.json`.
+
+Tried with Claude Code 2.1.325, with the file given through `--mcp-config`: the server shows as connected with its seven tools, and `list_sources`, `consumer_lag` and `topic_freshness` were called and answered, each leaving its line in the server's audit log. With a wrong token in the file the server shows as failed and no tool is offered.
+
 With the image:
 
 ```bash
@@ -122,7 +142,7 @@ What this mode is and is not:
 - The token is one shared secret, not user accounts. Everybody who has it sees the same, and the audit log cannot tell them apart.
 - **The connection is not encrypted.** The token and everything the tools return travel in the clear. On one machine that is fine; anywhere else, put a reverse proxy with TLS in front, or do not use this mode.
 - By default it listens on this machine only. The image listens on all of the container's interfaces, so who can reach it is decided where the port is published: `-p 127.0.0.1:8091:8091` keeps it local.
-- Tried with the MCP Java SDK's Streamable HTTP client (the test `HttpIT`) and with `curl`. Not tried with Claude Code or Claude Desktop as the client.
+- Tried with Claude Code (see above), with the MCP Java SDK's Streamable HTTP client (the test `HttpIT`) and with `curl`. Not tried with Claude Desktop.
 
 ## Status board
 
