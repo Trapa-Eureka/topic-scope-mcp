@@ -1,0 +1,147 @@
+# ==========================================================
+# topic-scope-mcp .gitignore
+# Principle: commit code only. Never commit secrets, broker data, or build output.
+# ==========================================================
+
+# ---------- [1] Product data ----------
+# Local audit log of tool calls (time, tool, source, topic). No payloads, but it names real topics.
+.topic-scope/
+**/.topic-scope/
+# Message dumps taken while debugging. Sample data for tests is allowed only inside fixtures folders.
+*.jsonl
+!**/fixtures/**/*.jsonl
+*.avro
+*.dump
+
+# ---------- [2] Secrets / credentials ----------
+.env
+.env.*
+!.env.example
+!.env.sample
+.envrc
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.jks
+*.keystore
+*.truststore
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+.netrc
+secrets/
+**/secrets/
+credentials.json
+*-credentials.json
+# Broker client settings with real addresses or passwords. Commit only the examples.
+application-local.yml
+application-local.yaml
+application-local.properties
+client.properties
+jaas.conf
+.aws/
+.azure/
+.gcloud/
+# Maven settings can hold repository passwords
+settings.xml
+settings-security.xml
+
+# ---------- [3] Java / Maven ----------
+target/
+**/target/
+*.class
+*.jar
+*.war
+hs_err_pid*
+replay_pid*
+dependency-reduced-pom.xml
+.flattened-pom.xml
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+release.properties
+# The wrapper scripts and .mvn/wrapper/maven-wrapper.properties ARE committed.
+.mvn/wrapper/maven-wrapper.jar
+.mvn/timing.properties
+
+# ---------- [4] Node (the optional web board, hook tests) ----------
+node_modules/
+**/node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+npm-debug.log*
+.pnpm-debug.log*
+.eslintcache
+coverage/
+playwright-report/
+test-results/
+
+# ---------- [5] Docker / local brokers ----------
+compose.override.yaml
+compose.override.yml
+docker-compose.override.yml
+kafka-data/
+mosquitto-data/
+**/mosquitto/data/
+**/mosquitto/log/
+
+# ---------- [6] Agent workspaces ----------
+# Shared settings (.claude/settings.json, hooks, skills) ARE committed. Personal ones are not.
+.claude/settings.local.json
+.claude/*.local.*
+.claude/projects/
+.claude/todos/
+.claude/logs/
+CLAUDE.local.md
+.worktrees/
+worktrees/
+.codex/
+.cursor/
+.aider*
+scratch/
+tmp/
+*.tmp
+*.bak
+*.orig
+*.rej
+*.swp
+*~
+
+# ---------- [7] Logs / runtime ----------
+logs/
+*.log
+*.pid
+*.hprof
+*.heapsnapshot
+
+# ---------- [8] OS-generated files ----------
+.DS_Store
+.AppleDouble
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ---------- [9] Editors / IDEs ----------
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/*
+!.vscode/extensions.json
+.settings/
+.project
+.classpath
+.factorypath
+.apt_generated/
+bin/
+nbproject/
+.history/
