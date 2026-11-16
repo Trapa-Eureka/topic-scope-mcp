@@ -18,7 +18,7 @@ class DemoDataTest {
       }
     }
     int declared = DemoData.TOPICS.stream().mapToInt(DemoData.TopicSpec::seededTotal).sum();
-    assertThat(DemoData.seedRecords()).hasSize(declared).hasSize(358);
+    assertThat(DemoData.seedRecords()).hasSize(declared).hasSize(366);
   }
 
   @Test

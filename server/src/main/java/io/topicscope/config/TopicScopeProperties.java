@@ -12,9 +12,10 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *
  * @param sources the configured brokers; names must be unique
  * @param probeTimeout how long a reachability check may take before the source counts as not answering
+ * @param requestTimeout how long any other question to a broker may take before the tool gives up
  */
 @ConfigurationProperties("topic-scope")
-public record TopicScopeProperties(List<Source> sources, Duration probeTimeout) {
+public record TopicScopeProperties(List<Source> sources, Duration probeTimeout, Duration requestTimeout) {
 
   public enum SourceType { KAFKA, MQTT }
 
@@ -36,6 +37,7 @@ public record TopicScopeProperties(List<Source> sources, Duration probeTimeout) 
   public TopicScopeProperties {
     sources = sources == null ? List.of() : List.copyOf(sources);
     probeTimeout = probeTimeout == null ? Duration.ofSeconds(5) : probeTimeout;
+    requestTimeout = requestTimeout == null ? Duration.ofSeconds(10) : requestTimeout;
     Set<String> seen = new HashSet<>();
     for (Source s : sources) {
       if (!seen.add(s.name())) throw new IllegalArgumentException("Two sources are named '" + s.name() + "'");

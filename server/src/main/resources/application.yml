@@ -25,7 +25,8 @@ spring:
 # To look elsewhere, put your own list in a file and start the server with
 #   --spring.config.additional-location=file:/path/to/topic-scope.yml
 topic-scope:
-  probe-timeout: 5s
+  probe-timeout: 5s      # list_sources: how long to wait for a broker to answer
+  request-timeout: 10s   # every other tool: how long one question to a broker may take
   sources:
     - name: local-kafka
       type: kafka

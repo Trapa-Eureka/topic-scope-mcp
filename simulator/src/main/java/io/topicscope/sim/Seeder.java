@@ -63,7 +63,8 @@ public final class Seeder {
 
       // retention.ms = -1: seeded records must never expire, or the known counts would drift.
       List<NewTopic> topics = DemoData.TOPICS.stream()
-          .map(t -> new NewTopic(t.name(), t.partitions(), (short) 1).configs(Map.of("retention.ms", "-1")))
+          .map(t -> new NewTopic(t.name(), t.partitions(), (short) 1)
+              .configs(t.compacted() ? Map.of("cleanup.policy", "compact") : Map.of("retention.ms", "-1")))
           .toList();
       admin.createTopics(topics).all().get();
 

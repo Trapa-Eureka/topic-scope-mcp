@@ -20,8 +20,16 @@ public final class DemoData {
 
   // ---------- Kafka topics ----------
 
-  /** A Kafka topic and how many records the seeder puts into each of its partitions. */
-  public record TopicSpec(String name, int partitions, int seededPerPartition) {
+  /**
+   * A Kafka topic and how many records the seeder puts into each of its partitions.
+   *
+   * @param compacted whether the topic is created with {@code cleanup.policy=compact}
+   */
+  public record TopicSpec(String name, int partitions, int seededPerPartition, boolean compacted) {
+    public TopicSpec(String name, int partitions, int seededPerPartition) {
+      this(name, partitions, seededPerPartition, false);
+    }
+
     public int seededTotal() {
       return partitions * seededPerPartition;
     }
@@ -37,8 +45,14 @@ public final class DemoData {
   public static final TopicSpec EDGE_CASES = new TopicSpec("demo.edge-cases", 1, 6);
   /** A topic that exists and holds nothing. */
   public static final TopicSpec EMPTY = new TopicSpec("demo.empty", 1, 0);
+  /**
+   * The latest state of each sensor, keyed by sensor: a compacted topic. Every sensor is written twice
+   * ("starting", then "online"), so the broker may drop the first of each pair at any time. The 8 offsets
+   * stay; how many records are still behind them is the broker's business. Never written again after seeding.
+   */
+  public static final TopicSpec DEVICE_STATE = new TopicSpec("demo.devices.state", 1, 8, true);
 
-  public static final List<TopicSpec> TOPICS = List.of(POSITIONS, TELEMETRY, ALARMS, EDGE_CASES, EMPTY);
+  public static final List<TopicSpec> TOPICS = List.of(POSITIONS, TELEMETRY, ALARMS, EDGE_CASES, EMPTY, DEVICE_STATE);
 
   // ---------- Kafka consumer groups ----------
 
@@ -206,6 +220,12 @@ public final class DemoData {
     out.add(new SeedRecord(e, 0, "oversized", utf8("{\"kind\":\"oversized\",\"blob\":\"" + "x".repeat(OVERSIZED_BLOB_CHARS) + "\"}"), Map.of()));
     out.add(new SeedRecord(e, 0, "secrets", utf8("{\"user\":\"operator1\",\"password\":\"not-a-real-password\",\"apiKey\":\"not-a-real-key\",\"token\":\"not-a-real-token\"}"), Map.of()));
     out.add(new SeedRecord(e, 0, "tombstone", null, Map.of()));
+
+    for (String state : List.of("starting", "online")) {
+      for (Device d : DEVICES) {
+        out.add(new SeedRecord(DEVICE_STATE.name(), 0, d.id(), utf8("{\"device\":\"" + d.id() + "\",\"state\":\"" + state + "\"}"), Map.of()));
+      }
+    }
 
     return out;
   }

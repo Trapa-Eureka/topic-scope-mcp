@@ -31,6 +31,7 @@ The single source of truth is `simulator/src/main/java/io/topicscope/sim/DemoDat
 | `demo.alarms` | 1 | 12 | never changes |
 | `demo.edge-cases` | 1 | 6 (JSON, text without key, binary, oversized, secret-looking, tombstone) | never changes |
 | `demo.empty` | 1 | 0 | never changes |
+| `demo.devices.state` | 1 | 8 (compacted: four sensors, each written twice) | never written again |
 
 | Consumer group | Topic | Seeded lag | Live mode |
 |---|---|---|---|
@@ -56,4 +57,5 @@ docker compose exec -T mosquitto mosquitto_sub -h localhost -t 'demo/#' -v -W 3
 - **"The broker is half seeded"** in the simulator log: a seed was interrupted. `docker compose down -v` and start again.
 - **Port 9092 or 1883 already in use**: another broker is running on this machine. Stop it; do not change the ports here without changing the README too.
 - **Image build fails on "Failed to validate Maven distribution SHA-256"**: the build image lost `unzip` (see the comment in `simulator/Dockerfile`).
+- **A topic from `DemoData` is missing on a stack that was already running**: the stack was seeded before the topic was added, and a seeded broker is left alone. `docker compose down -v`, then up again.
 - Changing `DemoData.java` changes what every later test expects. Run `./mvnw verify` and update the tables here and in the README.

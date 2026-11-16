@@ -12,7 +12,7 @@ Stack: Spring Boot 4.1 + Spring AI 2.0 (`spring-ai-starter-mcp-server`), MCP ove
 | Package | Holds | May use broker clients |
 |---|---|---|
 | `io.topicscope.kafka`, `io.topicscope.mqtt` | everything that talks to a broker | yes, read methods only |
-| `io.topicscope.tools` | `*Tools` (the `@McpTool` methods) and `*Service` (shapes the result) | no |
+| `io.topicscope.tools` | `*Tools` (the `@McpTool` methods) and `*Service` (shapes the result) | no, not even their types: readers return their own records |
 | `io.topicscope.config` | `topic-scope.*` properties | no |
 
 ## The tool method
@@ -30,8 +30,11 @@ public SomeRecord name(@McpToolParam(description = "...", required = true) Strin
 - Imports are `org.springframework.ai.mcp.annotation.*` (not the old `org.springaicommunity` package).
 - `McpServerIT` asserts for **every** tool: a description, `readOnlyHint = true`, `destructiveHint = false`, an output schema.
 - Return a record. **No field may be null**: the generated schema marks every field required, so use `""`, `0` or an empty list, and say in the Javadoc what empty means.
-- A broker problem is a result (a row, a status, a message), not an exception. Since Spring AI 2.0.1 a `RuntimeException` becomes an error result the model sees, but an `Error` kills the call without any answer.
-- Tool input that is wrong (unknown source, unknown topic) should answer with what is valid, for example the list of source names.
+- Resolve the source with `Sources.require(name)` and wrap every broker question in `Sources.ask(source, () -> ...)`. It turns any failure, including a `LinkageError`, into a `ToolProblem`. An `Error` that escapes kills the call without any answer.
+- A call that cannot be answered throws `new ToolProblem(problem, hint)`: one sentence for what is wrong, one for what would work (the names that exist, the tool to call instead). Spring AI prints the message, a line break and the root cause's message, so a plain exception shows its message twice; `ToolProblem` carries the hint as its cause for that reason. Never throw anything else on purpose.
+- `list_sources` is the exception: there an unreachable broker is a row, because reachability is the answer.
+- Times are ISO-8601 in UTC to the second (`TopicService.time`); "no time" is `""`, "no number" is `-1`.
+- Cap every list (see `TopicService.MAX_TOPICS`) and say in a `note` field when something was cut or is worth knowing. The note is `""` when there is nothing to say.
 
 ## Things that only break in the packaged jar
 
@@ -45,7 +48,7 @@ public SomeRecord name(@McpToolParam(description = "...", required = true) Strin
 ## Tests, in this order
 
 1. Unit test for the pure parts (formatting, status rules) next to the class.
-2. A case in `McpServerIT` (or a new `*IT` built the same way): start the jar through the MCP client, seed the brokers with `Seeder.seed(...)` from the simulator, and compare the answer with the constants in `DemoData`. Do not copy numbers into the test.
+2. A new `*IT` built like `KafkaTopicsIT`: `McpTestSupport.connect()` starts the packaged jar as a child process against brokers that are already seeded (once per run, seed only, no live traffic); `call(...)` returns the structured result, `callExpectingProblem(...)` the error text. Compare with the constants in `DemoData`; do not copy numbers into the test. Add the tool's name to the list in `McpServerIT`. Tests must not change the brokers, they are shared.
 3. `./mvnw verify`.
 
 ## Talking to the packaged server by hand
