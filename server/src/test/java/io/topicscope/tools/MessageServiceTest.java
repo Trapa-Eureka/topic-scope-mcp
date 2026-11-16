@@ -32,7 +32,7 @@ class MessageServiceTest {
     int askedLimit;
 
     @Override
-    public Tail tail(String bootstrapServers, String topic, List<Integer> partitions, int limit, Duration timeout) {
+    public Tail tail(Source source, String topic, List<Integer> partitions, int limit, Duration timeout) {
       askedPartitions = partitions;
       askedLimit = limit;
       return new Tail(records.stream().limit(limit).toList(), complete);
@@ -46,7 +46,7 @@ class MessageServiceTest {
 
   MessageService service(Limits limits) {
     TopicScopeProperties properties = new TopicScopeProperties(List.of(
-        new Source("k", SourceType.KAFKA, "kafka:9092"), new Source("m", SourceType.MQTT, "tcp://mqtt:1883")), null, null, limits);
+        Source.open("k", SourceType.KAFKA, "kafka:9092"), Source.open("m", SourceType.MQTT, "tcp://mqtt:1883")), null, null, limits, TopicScopeProperties.Audit.off());
     Sources sources = new Sources(properties);
     MqttService mqttService = new MqttService(sources, mqtt, properties);
     return new MessageService(sources, new TopicService(sources, cluster, mqttService, properties, Clock.systemUTC()), reader, mqttService, properties);

@@ -12,15 +12,16 @@ A read-only MCP server (Java 21, Spring Boot, Spring AI MCP) that shows an AI as
 - **A feature is done when its check passes**, not when the code is written. Mark it Done in the README only then, and say so plainly when something was not tried.
 - All files are in English, except `docs/*.ko.md`.
 
+- **A password is used to log in and nowhere else.** Not in an answer, an error message, a log line or the audit log.
 - **Nothing prints to stdout in the server.** It carries the MCP protocol; logs go to stderr.
 
 The first two are enforced by `.claude/hooks/block-dangerous.mjs`. If it blocks you, do not work around it; ask.
 
 ## Commands
 
-- `./mvnw verify` — unit tests and integration tests (`*IT` start their own brokers; Docker must run). `-DskipITs` for unit tests only. There is no system Maven; always use the wrapper
+- `./mvnw verify` — unit tests and integration tests (`*IT` start their own brokers; Docker must run; about five minutes). `-DskipITs` for unit tests only, `-DskipTests install` to only build the jar. There is no system Maven; always use the wrapper
 - `node --test .claude/hooks/block-dangerous.test.mjs` — after any change to the hook
-- `docker compose up -d --build --wait` — the local stack
+- `docker compose up -d --build --wait` — the local stack. Its brokers ask for a login; the demo accounts are in `compose.yaml`
 
 ## Layout
 

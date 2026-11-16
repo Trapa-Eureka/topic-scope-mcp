@@ -24,8 +24,8 @@ class TopicServiceTest {
   static final long ONE_MINUTE_AGO = NOW.minusSeconds(60).toEpochMilli();
 
   static final TopicScopeProperties PROPERTIES = new TopicScopeProperties(List.of(
-      new Source("k", SourceType.KAFKA, "kafka:9092"),
-      new Source("m", SourceType.MQTT, "tcp://user:secret@mqtt:1883")), null, null, null);
+      Source.open("k", SourceType.KAFKA, "kafka:9092"),
+      Source.open("m", SourceType.MQTT, "tcp://user:secret@mqtt:1883")), null, null, null, TopicScopeProperties.Audit.off());
 
   /** A cluster made of the given topics. */
   static class PretendCluster extends KafkaTopicReader {
@@ -38,18 +38,18 @@ class TopicServiceTest {
     }
 
     @Override
-    public List<TopicName> listNames(String bootstrapServers, Duration timeout) throws Exception {
+    public List<TopicName> listNames(Source source, Duration timeout) throws Exception {
       if (failure != null) throw failure;
       return topics.stream().map(t -> new TopicName(t.name(), t.internal())).sorted(java.util.Comparator.comparing(TopicName::name)).toList();
     }
 
     @Override
-    public List<TopicInfo> describe(String bootstrapServers, Collection<String> names, Duration timeout) {
+    public List<TopicInfo> describe(Source source, Collection<String> names, Duration timeout) {
       return topics.stream().filter(t -> names.contains(t.name())).sorted(java.util.Comparator.comparing(TopicInfo::name)).toList();
     }
 
     @Override
-    public Optional<List<Setting>> settings(String bootstrapServers, String topic, Duration timeout) {
+    public Optional<List<Setting>> settings(Source source, String topic, Duration timeout) {
       return Optional.of(List.of(
           new Setting("cleanup.policy", "delete", false),
           new Setting("flush.ms", "9223372036854775807", false),
@@ -171,7 +171,7 @@ class TopicServiceTest {
   void aCompactedTopicSaysThatItsMessageCountIsAnUpperBound() {
     PretendCluster cluster = new PretendCluster() {
       @Override
-      public Optional<List<Setting>> settings(String bootstrapServers, String topic, Duration timeout) {
+      public Optional<List<Setting>> settings(Source source, String topic, Duration timeout) {
         return Optional.of(List.of(new Setting("cleanup.policy", "compact,delete", true)));
       }
     };
@@ -221,7 +221,8 @@ class TopicServiceTest {
     PretendCluster cluster = new PretendCluster();
     cluster.failure = new java.util.concurrent.ExecutionException(new java.util.concurrent.TimeoutException());
     assertThat(problem(() -> service(cluster).listTopics("k", null, null, null, null)))
-        .isEqualTo("Source 'k' (kafka:9092) could not be read: no answer within the timeout. Call list_sources to see whether it answers at all.");
+        .startsWith("Source 'k' (kafka:9092) could not be read: no answer within the timeout. Call list_sources to see whether it answers at all.")
+        .contains("check the username and password of the source");
 
     Sources sources = new Sources(PROPERTIES);
     assertThat(problem(() -> sources.ask(PROPERTIES.source("m").orElseThrow(), () -> { throw new NoClassDefFoundError("x/Y"); })))

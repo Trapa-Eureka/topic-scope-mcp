@@ -88,11 +88,11 @@ public class SourceService {
     try {
       String detail = switch (source.type()) {
         case KAFKA -> {
-          KafkaProbe.ClusterInfo c = kafkaProbe.describe(source.address(), properties.probeTimeout());
+          KafkaProbe.ClusterInfo c = kafkaProbe.describe(source, properties.probeTimeout());
           yield "cluster " + c.clusterId() + ", " + c.brokers() + (c.brokers() == 1 ? " broker" : " brokers");
         }
         case MQTT -> {
-          MqttProbe.BrokerInfo b = mqttProbe.connect(source.address(), properties.probeTimeout());
+          MqttProbe.BrokerInfo b = mqttProbe.connect(source, properties.probeTimeout());
           yield b.version() == null ? "connected (the broker does not announce a version)" : b.version();
         }
       };
@@ -104,7 +104,7 @@ public class SourceService {
   }
 
   private static SourceStatus unreachable(Source source, long millis, Throwable e) {
-    return new SourceStatus(source.name(), source.type().name(), withoutPassword(source.address()), false, reason(e), millis);
+    return new SourceStatus(source.name(), source.type().name(), withoutPassword(source.address()), false, Sources.withoutSecret(source, reason(e)), millis);
   }
 
   private static long millisSince(long startNanos) {

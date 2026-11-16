@@ -5,6 +5,7 @@ import io.topicscope.config.TopicScopeProperties.Source;
 import io.topicscope.mqtt.MqttObserver;
 import io.topicscope.mqtt.MqttObserver.Seen;
 import io.topicscope.mqtt.MqttObserver.Window;
+import io.topicscope.safety.TopicAccess;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -53,8 +54,18 @@ public class MqttService {
   /** A counter the broker publishes about itself, as text exactly as published. */
   public record BrokerCounter(String name, String value) {}
 
-  /** The outcome of one listening window. {@code newest} holds the newest messages, newest first, at most as many as were asked for. */
-  public record Heard(Window window, List<TopicActivity> topics, List<Seen> newest, int totalMessages, List<BrokerCounter> brokerCounters) {}
+  /**
+   * The outcome of one listening window. {@code newest} holds the newest messages, newest first, at most as many as were asked for.
+   *
+   * @param hiddenMessages messages that arrived on topics the server's configuration leaves out; they were dropped without being looked at
+   */
+  public record Heard(Window window, List<TopicActivity> topics, List<Seen> newest, int totalMessages, List<BrokerCounter> brokerCounters, int hiddenMessages) {
+
+    /** A sentence for a result's note, or nothing when no message was dropped. */
+    public String hiddenNote() {
+      return Sources.hiddenNote(hiddenMessages, "message(s) on other topics arrived and were dropped unread:");
+    }
+  }
 
   private final Sources sources;
   private final MqttObserver observer;
@@ -92,6 +103,11 @@ public class MqttService {
     filters.add(filter);
     if (withCounters) filters.addAll(BROKER_COUNTERS);
 
+    TopicAccess access = sources.access(source);
+    boolean exact = !filter.contains("+") && !filter.contains("#");
+    if (exact) sources.requireAllowed(source, filter);
+    int[] hidden = {0};
+
     Map<String, Tally> tallies = new TreeMap<>();
     Map<String, String> counters = new TreeMap<>();
     Deque<Seen> newest = new ArrayDeque<>();
@@ -99,9 +115,13 @@ public class MqttService {
 
     Window window = sources.ask(source, () -> {
       try {
-        return observer.observe(source.address(), filters, Duration.ofSeconds(windowSeconds), properties.requestTimeout(), seen -> {
+        return observer.observe(source, filters, Duration.ofSeconds(windowSeconds), properties.requestTimeout(), seen -> {
           if (withCounters && BROKER_COUNTERS.contains(seen.topic())) {
             counters.put(seen.topic(), new String(seen.payload(), java.nio.charset.StandardCharsets.UTF_8));
+            return;
+          }
+          if (!access.permits(seen.topic())) {
+            hidden[0]++; // dropped here, before its payload is looked at, counted or kept
             return;
           }
           total[0]++;
@@ -119,7 +139,7 @@ public class MqttService {
 
     List<TopicActivity> topics = tallies.values().stream().map(Tally::activity).toList();
     List<BrokerCounter> brokerCounters = counters.entrySet().stream().map(e -> new BrokerCounter(e.getKey(), e.getValue())).toList();
-    return new Heard(window, topics, List.copyOf(newest), total[0], brokerCounters);
+    return new Heard(window, topics, List.copyOf(newest), total[0], brokerCounters, hidden[0]);
   }
 
   /** Keeps the start of an oversized payload: enough to show a preview, and the formatter marks it as cut. */

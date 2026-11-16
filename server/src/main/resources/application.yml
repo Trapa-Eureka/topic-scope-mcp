@@ -31,10 +31,17 @@ topic-scope:
     max-messages: 100      # most messages one call returns
     max-value-chars: 2000  # most characters shown of one value
     max-total-chars: 40000 # most characters of values in one answer
+  audit:                 # one line per tool call: when, which tool, which arguments, how it ended. Never message content
+    enabled: ${TOPIC_SCOPE_AUDIT:true}
+    file: ${TOPIC_SCOPE_AUDIT_FILE:${user.home}/.topic-scope/audit.jsonl}
   sources:
     - name: local-kafka
       type: kafka
       address: ${TOPIC_SCOPE_KAFKA:localhost:9092}
+      username: ${TOPIC_SCOPE_KAFKA_USERNAME:}
+      password: ${TOPIC_SCOPE_KAFKA_PASSWORD:}
     - name: local-mqtt
       type: mqtt
       address: ${TOPIC_SCOPE_MQTT:tcp://localhost:1883}
+      username: ${TOPIC_SCOPE_MQTT_USERNAME:}
+      password: ${TOPIC_SCOPE_MQTT_PASSWORD:}

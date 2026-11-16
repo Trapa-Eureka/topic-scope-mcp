@@ -84,12 +84,12 @@ class GroupServiceTest {
     }
 
     @Override
-    public List<GroupInfo> list(String bootstrapServers, Duration timeout) {
+    public List<GroupInfo> list(Source source, Duration timeout) {
       return all.stream().sorted(java.util.Comparator.comparing(GroupInfo::group)).toList();
     }
 
     @Override
-    public Optional<TwoSamples> sampleTwice(String bootstrapServers, String group, Duration pause, Duration timeout) {
+    public Optional<TwoSamples> sampleTwice(Source source, String group, Duration pause, Duration timeout) {
       askedPause = pause;
       return Optional.ofNullable(samples.get(group));
     }
@@ -101,7 +101,7 @@ class GroupServiceTest {
     Map<Partition, Long> asked = Map.of();
 
     @Override
-    public Map<Partition, Long> timestampsAt(String bootstrapServers, Map<Partition, Long> offsets, Duration timeout) {
+    public Map<Partition, Long> timestampsAt(Source source, Map<Partition, Long> offsets, Duration timeout) {
       asked = offsets;
       Map<Partition, Long> out = new HashMap<>();
       offsets.keySet().forEach(p -> out.put(p, NOW.minusSeconds(ageSeconds).toEpochMilli()));
@@ -114,7 +114,7 @@ class GroupServiceTest {
 
   GroupService service() {
     TopicScopeProperties properties = new TopicScopeProperties(List.of(
-        new Source("k", SourceType.KAFKA, "kafka:9092"), new Source("m", SourceType.MQTT, "tcp://mqtt:1883")), null, null, null);
+        Source.open("k", SourceType.KAFKA, "kafka:9092"), Source.open("m", SourceType.MQTT, "tcp://mqtt:1883")), null, null, null, TopicScopeProperties.Audit.off());
     return new GroupService(new Sources(properties), groups, records, properties, Clock.fixed(NOW, ZoneOffset.UTC));
   }
 

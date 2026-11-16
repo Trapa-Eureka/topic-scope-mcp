@@ -1,5 +1,6 @@
 package io.topicscope.kafka;
 
+import io.topicscope.config.TopicScopeProperties.Source;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -52,11 +53,11 @@ public class KafkaRecordReader {
    *
    * @param partitions partitions that exist and have a leader
    */
-  public Tail tail(String bootstrapServers, String topic, List<Integer> partitions, int limit, Duration timeout) {
+  public Tail tail(Source source, String topic, List<Integer> partitions, int limit, Duration timeout) {
     if (partitions.isEmpty() || limit < 1) return new Tail(List.of(), true);
     long deadline = System.nanoTime() + timeout.toNanos();
 
-    KafkaConsumer<byte[], byte[]> consumer = KafkaClients.consumer(bootstrapServers, timeout);
+    KafkaConsumer<byte[], byte[]> consumer = KafkaClients.consumer(source, timeout);
     try {
       List<TopicPartition> tps = partitions.stream().map(p -> new TopicPartition(topic, p)).toList();
       consumer.assign(tps);
@@ -105,12 +106,12 @@ public class KafkaRecordReader {
    *
    * @return only the partitions for which a record was found in time
    */
-  public Map<KafkaGroupReader.Partition, Long> timestampsAt(String bootstrapServers, Map<KafkaGroupReader.Partition, Long> offsets, Duration timeout) {
+  public Map<KafkaGroupReader.Partition, Long> timestampsAt(Source source, Map<KafkaGroupReader.Partition, Long> offsets, Duration timeout) {
     if (offsets.isEmpty()) return Map.of();
     Duration wait = timeout.compareTo(TIMESTAMP_LOOKUP) < 0 ? timeout : TIMESTAMP_LOOKUP;
     long deadline = System.nanoTime() + wait.toNanos();
 
-    KafkaConsumer<byte[], byte[]> consumer = KafkaClients.consumer(bootstrapServers, timeout);
+    KafkaConsumer<byte[], byte[]> consumer = KafkaClients.consumer(source, timeout);
     try {
       Map<TopicPartition, KafkaGroupReader.Partition> wanted = new HashMap<>();
       offsets.forEach((p, offset) -> wanted.put(new TopicPartition(p.topic(), p.partition()), p));

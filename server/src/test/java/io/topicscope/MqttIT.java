@@ -178,7 +178,7 @@ class MqttIT {
 
     try (KafkaContainer kafka = new KafkaContainer("apache/kafka:4.3.2");
         GenericContainer<?> mosquitto = new GenericContainer<>("eclipse-mosquitto:2.0.22").withExposedPorts(1883)
-            .withCopyFileToContainer(MountableFile.forHostPath(Path.of("..", "mosquitto", "mosquitto.conf").toAbsolutePath().normalize()),
+            .withCopyFileToContainer(MountableFile.forHostPath(Path.of("..", "mosquitto", "open.conf").toAbsolutePath().normalize()),
                 "/mosquitto/config/mosquitto.conf")) {
       kafka.start();
       mosquitto.start();

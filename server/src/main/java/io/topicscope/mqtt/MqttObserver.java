@@ -1,14 +1,12 @@
 package io.topicscope.mqtt;
 
+import io.topicscope.config.TopicScopeProperties.Source;
 import java.time.Duration;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.eclipse.paho.client.mqttv3.IMqttMessageListener;
 import org.eclipse.paho.client.mqttv3.MqttClient;
-import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttTopic;
-import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 import org.springframework.stereotype.Component;
 
 /**
@@ -49,15 +47,10 @@ public class MqttObserver {
    * @throws IllegalArgumentException when a filter is not a valid MQTT topic filter
    * @throws Exception when the broker does not accept the connection or the subscription
    */
-  public Window observe(String uri, List<String> filters, Duration window, Duration timeout, Sink sink) throws Exception {
+  public Window observe(Source source, List<String> filters, Duration window, Duration timeout, Sink sink) throws Exception {
     for (String filter : filters) MqttTopic.validate(filter, true);
 
-    MqttClient client = new MqttClient(uri, "topic-scope-" + UUID.randomUUID(), new MemoryPersistence());
-    MqttConnectOptions options = new MqttConnectOptions();
-    options.setCleanSession(true);
-    options.setAutomaticReconnect(false);
-    options.setConnectionTimeout((int) Math.max(1, timeout.toSeconds()));
-    client.setTimeToWait(timeout.toMillis());
+    MqttClient client = MqttClients.client(source, timeout);
 
     AtomicBoolean listening = new AtomicBoolean(true);
     Object oneAtATime = new Object();
@@ -69,7 +62,7 @@ public class MqttObserver {
     };
 
     try {
-      client.connect(options);
+      client.connect(MqttClients.options(source, timeout));
       String[] topics = filters.toArray(String[]::new);
       int[] qos = new int[topics.length];
       IMqttMessageListener[] listeners = new IMqttMessageListener[topics.length];
@@ -87,11 +80,7 @@ public class MqttObserver {
       return new Window(started, System.currentTimeMillis());
     } finally {
       listening.set(false);
-      try {
-        if (client.isConnected()) client.disconnect(1000);
-      } finally {
-        client.close(true);
-      }
+      MqttClients.close(client);
     }
   }
 }

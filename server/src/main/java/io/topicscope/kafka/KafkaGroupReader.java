@@ -1,5 +1,6 @@
 package io.topicscope.kafka;
 
+import io.topicscope.config.TopicScopeProperties.Source;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -64,8 +65,8 @@ public class KafkaGroupReader {
   public record TwoSamples(Sample first, Sample second, Duration between) {}
 
   /** Every consumer group, sorted by name. */
-  public List<GroupInfo> list(String bootstrapServers, Duration timeout) throws Exception {
-    Admin admin = KafkaClients.admin(bootstrapServers, timeout);
+  public List<GroupInfo> list(Source source, Duration timeout) throws Exception {
+    Admin admin = KafkaClients.admin(source, timeout);
     try {
       return list(admin, timeout);
     } finally {
@@ -78,8 +79,8 @@ public class KafkaGroupReader {
    *
    * @return empty when the cluster has no group of that name
    */
-  public Optional<TwoSamples> sampleTwice(String bootstrapServers, String group, Duration pause, Duration timeout) throws Exception {
-    Admin admin = KafkaClients.admin(bootstrapServers, timeout);
+  public Optional<TwoSamples> sampleTwice(Source source, String group, Duration pause, Duration timeout) throws Exception {
+    Admin admin = KafkaClients.admin(source, timeout);
     try {
       if (list(admin, timeout).stream().noneMatch(g -> g.group().equals(group))) return Optional.empty();
       long start = System.nanoTime();

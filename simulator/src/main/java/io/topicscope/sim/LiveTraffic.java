@@ -57,28 +57,32 @@ public final class LiveTraffic implements AutoCloseable {
   private final AtomicInteger telemetrySeq = new AtomicInteger(DemoData.SEEDED_STEPS_PER_DEVICE);
   private final long startedAt = System.nanoTime();
 
-  private LiveTraffic(String kafkaBootstrap, String mqttUri, Timing timing) throws MqttException {
-    Properties props = new Properties();
-    props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, kafkaBootstrap);
+  private LiveTraffic(Stack stack, Timing timing) throws MqttException {
+    Properties props = stack.kafka();
     props.put(ProducerConfig.CLIENT_ID_CONFIG, "topic-scope-simulator-live");
     props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, ByteArraySerializer.class);
     props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, ByteArraySerializer.class);
     producer = new KafkaProducer<>(props);
 
     // The bridge subscribes before anything is published, so no reading is missed.
-    mqttBridge = connect(mqttUri, "topic-scope-simulator-bridge");
+    mqttBridge = connect(stack, "topic-scope-simulator-bridge");
     mqttBridge.subscribe(DemoData.TELEMETRY_FILTER, 1, (topic, message) -> bridgeToKafka(topic, message.getPayload()));
-    mqttPublisher = connect(mqttUri, "topic-scope-simulator-live");
+    mqttPublisher = connect(stack, "topic-scope-simulator-live");
 
     scheduler.scheduleAtFixedRate(this::publishPosition, 0, timing.positionInterval().toMillis(), TimeUnit.MILLISECONDS);
     scheduler.scheduleAtFixedRate(() -> publishTelemetry(timing.silentAfter()), 0, timing.telemetryInterval().toMillis(), TimeUnit.MILLISECONDS);
 
-    startConsumer(kafkaBootstrap, DemoData.ARCHIVER, 500, Duration.ZERO);
-    startConsumer(kafkaBootstrap, DemoData.TRACKER, 1, timing.trackerPause());
+    startConsumer(stack, DemoData.ARCHIVER, 500, Duration.ZERO);
+    startConsumer(stack, DemoData.TRACKER, 1, timing.trackerPause());
   }
 
+  /** On brokers that ask for no login. */
   public static LiveTraffic start(String kafkaBootstrap, String mqttUri, Timing timing) throws MqttException {
-    return new LiveTraffic(kafkaBootstrap, mqttUri, timing);
+    return new LiveTraffic(Stack.open(kafkaBootstrap, mqttUri), timing);
+  }
+
+  public static LiveTraffic start(Stack stack, Timing timing) throws MqttException {
+    return new LiveTraffic(stack, timing);
   }
 
   // ---------- publishers ----------
@@ -124,9 +128,8 @@ public final class LiveTraffic implements AutoCloseable {
   // ---------- consumers ----------
 
   /** Reads at most {@code maxRecords} per poll, commits, then waits {@code pause}. A long pause with one record makes a slow consumer. */
-  private void startConsumer(String bootstrap, DemoData.GroupSpec group, int maxRecords, Duration pause) {
-    Properties props = new Properties();
-    props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrap);
+  private void startConsumer(Stack stack, DemoData.GroupSpec group, int maxRecords, Duration pause) {
+    Properties props = stack.kafka();
     props.put(ConsumerConfig.GROUP_ID_CONFIG, group.group());
     props.put(ConsumerConfig.CLIENT_ID_CONFIG, group.group() + "-1");
     props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
@@ -183,12 +186,10 @@ public final class LiveTraffic implements AutoCloseable {
     producer.close(Duration.ofSeconds(5));
   }
 
-  private static MqttClient connect(String uri, String clientId) throws MqttException {
-    MqttClient client = new MqttClient(uri, clientId, new MemoryPersistence());
-    MqttConnectOptions options = new MqttConnectOptions();
-    options.setCleanSession(true);
+  private static MqttClient connect(Stack stack, String clientId) throws MqttException {
+    MqttClient client = new MqttClient(stack.mqttUri(), clientId, new MemoryPersistence());
+    MqttConnectOptions options = stack.mqtt();
     options.setAutomaticReconnect(true);
-    options.setConnectionTimeout(10);
     client.connect(options);
     return client;
   }

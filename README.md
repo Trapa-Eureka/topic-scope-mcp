@@ -2,8 +2,8 @@
 
 A **read-only** MCP server that lets an AI assistant look inside Kafka and MQTT brokers: which topics exist, what the latest messages are, and whether consumers are keeping up.
 
-> **Status: Phases 0 to 6 of 9 done. All three views work for Kafka and for MQTT.**
-> What exists: an MCP server with seven tools (`list_sources`, `list_topics`, `describe_topic`, `recent_messages`, `list_consumer_groups`, `consumer_lag`, `topic_freshness`), a build that fails if server code could change a broker, and a [local stack](#local-stack-and-demo-data) of Kafka and Mosquitto with demo data known in advance. Still to come: broker accounts, topic allow and deny lists and the audit log (Phase 7), an optional web status board (Phase 8), a release (Phase 9).
+> **Status: Phases 0 to 7 of 9 done. All three views work for Kafka and for MQTT, and every safety rule below is in place.**
+> What exists: an MCP server with seven tools (`list_sources`, `list_topics`, `describe_topic`, `recent_messages`, `list_consumer_groups`, `consumer_lag`, `topic_freshness`); logins for brokers that ask for one; topic allow and deny lists; an audit log of every call; a build that fails if server code could change a broker; and a [local stack](#local-stack-and-demo-data) of Kafka and Mosquitto in which the server's account is kept from writing by the brokers themselves. Still to come: an optional web status board (Phase 8) and a release (Phase 9).
 
 **Jump to:** [What it shows](#what-it-shows) · [Tools](#tools) · [Safety](#safety) · [Roadmap](#roadmap) · [Installation](#installation)
 
@@ -149,19 +149,29 @@ Rules that matter are enforced by a mechanism and a test, not by a sentence in a
 | Never publish | The Kafka producer API and the MQTT publish call are not on the code path; an architecture test fails the build if any class references them |
 | Never disturb a consumer group | Records are read with `assign` + `seek`, never `subscribe`; no `group.id` is set and auto-commit is off, so no group is joined and no offset is committed |
 | Leave no trace on an MQTT broker | A random client id, a clean session and no last-will message, so nothing stays behind after disconnect |
-| Only look where allowed | Topic allow and deny lists per source; a denied topic is refused by name and its payload is never read |
+| Only look where allowed | Topic allow and deny lists per source ([how to set them](#which-topics-may-be-shown)). A topic that is left out does not appear in any list, and asking for it by name is refused with the same answer whether it exists or not. On Kafka its records are never fetched. On MQTT a message on such a topic that the broker delivers is dropped on arrival, before it is looked at; keeping it from being delivered at all is the broker's job |
 | Do not leak payloads | Size caps on every value, redaction of secret-looking fields, a hard limit on *N* and on listening time |
 | Do not overload a broker | One short-lived connection per call, timeouts on every call |
-| Leave a trail | Every tool call is appended to a local audit log: time, tool, source, topic. Never the payload |
+| Leave a trail | Every tool call is appended to a local [audit log](#audit-log): time, tool, arguments, outcome, duration. Never what the tool returned. While recording is on, a call that cannot be recorded is not answered |
+| Do not rely on the server alone | The local stack gives the server an account that the brokers keep from writing, and a test tries to write with it |
 
-What is in place today: everything except the allow and deny lists and the audit log (Phase 7).
+All of this is in place, and each row has a test:
 
 - [`ReadOnlyArchitectureTest`](server/src/test/java/io/topicscope/ReadOnlyArchitectureTest.java) reads the compiled server and fails the build when it calls a broker-client method outside a short allow list of read methods (list, describe, assign, seek, poll, subscribe on MQTT). Each rule is also run against a deliberately bad class, to prove the rule can fail.
 - [`MqttIT`](server/src/test/java/io/topicscope/MqttIT.java) runs every MQTT tool several times and then asks the broker with a client of its own: the retained messages are exactly the seeded ones (nothing was published), and the broker holds no session for a client that is gone.
 - [`KafkaMessagesIT`](server/src/test/java/io/topicscope/KafkaMessagesIT.java) reads every demo topic through `recent_messages` and then asks the broker itself: the set of consumer groups is the same as before, no committed offset has moved, no end offset has moved. It also asks for a topic that does not exist on a broker that creates topics on first use, and checks that the topic was not created.
-- The Kafka consumer is built in one place, with no group, auto-commit off, and topic auto-creation off.
+- The Kafka consumer is built in one place, with no group, auto-commit off, and topic auto-creation off. A source's configuration may add client settings for encryption and login only; anything else stops the server from starting.
+- [`AccessAndAuditIT`](server/src/test/java/io/topicscope/AccessAndAuditIT.java) starts servers with allow and deny lists and checks every tool against them, then reads the audit log: one line per call, with the arguments, without a single message value.
+- [`SecuredStackIT`](server/src/test/java/io/topicscope/SecuredStackIT.java) starts brokers with the local stack's own settings (it reads them from `compose.yaml`). With the server's look-only account every tool works. With that same account the test then tries to publish, create and delete a topic, move and delete a consumer group, join a group, and publish over MQTT: **the brokers refuse all of it**, and nothing has changed afterwards.
 
-On the broker side, give the server an account that only has read permissions (Kafka ACLs: `Describe`, `DescribeConfigs`, `Read`; MQTT ACL: subscribe only). The server's own rules are the second line of defence, not the first.
+On the broker side, give the server an account that only has read permissions. The server's own rules are the second line of defence, not the first. What the account needs, and all it needs:
+
+| Broker | Rights |
+|---|---|
+| Kafka | `Describe`, `DescribeConfigs` and `Read` on topics; `Describe` on consumer groups; `Describe` on the cluster. No `Write`, `Create`, `Delete` or `Alter` on anything |
+| MQTT | subscribe (read) on the topics it may see, and on `$SYS/#` for the broker's counters. No publish |
+
+The local stack sets up exactly this: see [`Seeder.lookOnlyRules`](simulator/src/main/java/io/topicscope/sim/Seeder.java) and [`mosquitto/acl`](mosquitto/acl).
 
 ## Requirements
 
@@ -179,7 +189,7 @@ There is no release yet. Build from source:
 ```bash
 git clone https://github.com/Trapa-Eureka/topic-scope-mcp.git
 cd topic-scope-mcp
-./mvnw -DskipTests install            # builds server/target/topic-scope-server-0.1.0-SNAPSHOT.jar
+./mvnw -DskipTests install            # builds server/target/topic-scope-server-0.1.0-SNAPSHOT.jar in a few seconds
 docker compose up -d --build --wait   # Kafka on localhost:9092, Mosquitto on localhost:1883, demo data, sample traffic
 ```
 
@@ -194,18 +204,22 @@ command: java
 args:    -jar /absolute/path/to/topic-scope-mcp/server/target/topic-scope-server-0.1.0-SNAPSHOT.jar
 ```
 
-For Claude Code, the repository ships a project-level [`.mcp.json`](.mcp.json) with exactly this (relative path, so start Claude Code in the repository folder and approve the server when asked). Then ask "which brokers can you see?".
+For Claude Code, the repository ships a project-level [`.mcp.json`](.mcp.json) with exactly this plus the local stack's look-only login (relative path, so start Claude Code in the repository folder and approve the server when asked). Then ask "which brokers can you see?".
 
 What has been tried: the MCP Java SDK client (the end-to-end test `McpServerIT`), raw JSON-RPC over a pipe, and Claude Code, where the server connects through `.mcp.json` and the question "which brokers can you see?" is answered with both sources of the local stack. Claude Desktop has not been tried.
 
 ### Configuration
 
-Out of the box the server looks at the local stack. Two environment variables move it:
+Out of the box the server has two sources, `local-kafka` and `local-mqtt`, that point at the local stack. Environment variables set where they are and how to log in:
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `TOPIC_SCOPE_KAFKA` | `localhost:9092` | bootstrap servers of the source `local-kafka` |
+| `TOPIC_SCOPE_KAFKA_USERNAME`, `TOPIC_SCOPE_KAFKA_PASSWORD` | none | its login. For the local stack: `topicscope` / `topicscope-local-only` |
 | `TOPIC_SCOPE_MQTT` | `tcp://localhost:1883` | URI of the source `local-mqtt` |
+| `TOPIC_SCOPE_MQTT_USERNAME`, `TOPIC_SCOPE_MQTT_PASSWORD` | none | its login. For the local stack: the same |
+| `TOPIC_SCOPE_AUDIT_FILE` | `~/.topic-scope/audit.jsonl` | where calls are recorded |
+| `TOPIC_SCOPE_AUDIT` | `true` | `false` turns recording off |
 
 Two timeouts bound every call: `topic-scope.probe-timeout` (5 s, `list_sources`) and `topic-scope.request-timeout` (10 s, each question the other tools ask a broker). If `recent_messages` runs into it, it returns what it has and says so.
 
@@ -218,13 +232,52 @@ topic-scope:
   sources:
     - name: tower-kafka
       type: kafka
-      address: broker-1:9092,broker-2:9092
+      address: broker-1:9093,broker-2:9093
+      username: viewer
+      password: ${TOWER_KAFKA_PASSWORD}      # from the environment; do not write passwords into the file
+      properties:                            # Kafka only: encryption and login settings, nothing else is accepted
+        security.protocol: SASL_SSL
+        sasl.mechanism: SCRAM-SHA-512
+        ssl.truststore.location: /etc/topic-scope/truststore.jks
+      topics:
+        allow: ["surveillance.*", "flightplan.*"]
+        deny: ["*.internal"]
     - name: field-mqtt
       type: mqtt
-      address: tcp://mqtt-host:1883
+      address: ssl://mqtt-host:8883          # tcp:// without TLS, ssl:// with
+      username: viewer
+      password: ${FIELD_MQTT_PASSWORD}
+      topics:
+        deny: ["plant/*/maintenance/*"]
 ```
 
-Brokers that need a login or TLS are not supported yet (Phase 7).
+A file that defines `sources` replaces the default list as a whole.
+
+#### Logging in
+
+- **Kafka**: with a `username`, the server logs in with SASL. The defaults are `security.protocol: SASL_PLAINTEXT` and `sasl.mechanism: PLAIN`; set them under `properties` for TLS (`SASL_SSL`) or SCRAM. `properties` takes settings that start with `security.protocol`, `sasl.`, `ssl.` or `client.dns.lookup`. Any other setting stops the server at start-up, so a configuration file cannot give the look-only consumer a group or switch its auto-commit on.
+- **MQTT**: `username` and `password`, over `tcp://` or `ssl://`. TLS uses the Java trust store; a private certificate authority has to be added there. Client certificates are not supported.
+- A password is used to log in and nowhere else. It is not part of any answer, error message or audit line, and a test checks that with a wrong password.
+- Tried against the local stack: SASL/PLAIN on Kafka, user name and password on Mosquitto. **TLS, SCRAM and `ssl://` are configured as described but have not been tried against a broker.**
+
+#### Which topics may be shown
+
+`topics.allow` and `topics.deny` of a source take patterns that are matched against the whole topic name, case-sensitively. `*` stands for any run of characters, including the `.` of a Kafka name and the `/` of an MQTT topic; everything else is literal. **Deny wins.** With an allow list, only what it names is available; without one, everything that is not denied.
+
+A topic that is left out is missing from `list_topics` and `topic_freshness` (the note says how many were left out), is refused by name by `describe_topic` and `recent_messages`, and is not counted in `consumer_lag`.
+
+#### Audit log
+
+One JSON object per line in `~/.topic-scope/audit.jsonl` (the folder and the file are created for the owner only):
+
+```json
+{"time":"2026-11-16T14:40:35.389Z","tool":"describe_topic","arguments":{"source":"local-kafka","topic":"demo.alarms"},"outcome":"ok","millis":343}
+{"time":"2026-11-16T14:41:02.117Z","tool":"recent_messages","arguments":{"source":"local-kafka","topic":"demo.alarm"},"outcome":"refused","millis":41,"problem":"There is no topic named 'demo.alarm' on source 'local-kafka'. Did you mean: demo.alarms."}
+```
+
+`outcome` is `ok`, `refused` (the call was answered with a problem, which is recorded) or `error`. The log holds what was asked, never what was answered. It is not rotated; it grows by one short line per call.
+
+While recording is on, a call that cannot be recorded is not answered: the tool says so and names the file. Where it matters who looked at what, an unrecorded look is worse than a refused one. `TOPIC_SCOPE_AUDIT=false` turns recording off.
 
 ### Develop this repository
 
@@ -246,6 +299,25 @@ docker compose down -v                                # stop and forget everythi
 ```
 
 Every port is published on `127.0.0.1` only. Topics are never created automatically, so a typo in a topic name is an error.
+
+Both brokers ask for a login, with two accounts each:
+
+| Account | Password | May |
+|---|---|---|
+| `simulator` | `simulator-local-only` | everything: it sets the stack up and publishes |
+| `topicscope` | `topicscope-local-only` | look, and nothing else. The MCP server's login |
+
+These passwords are not secrets and protect nothing; the ports are local. They are there so that the stack shows the set-up a real broker should have: **the server logs in with an account that the broker itself keeps from writing.**
+
+To cross-check the server with the brokers' own tools:
+
+```bash
+docker compose exec -T kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 \
+  --command-config /etc/kafka-client/local-admin.properties --describe --all-groups
+docker compose exec -T kafka /opt/kafka/bin/kafka-acls.sh --bootstrap-server localhost:9092 \
+  --command-config /etc/kafka-client/local-admin.properties --list
+docker compose exec -T mosquitto mosquitto_sub -h localhost -u simulator -P simulator-local-only -t 'demo/#' -v -W 3
+```
 
 ### After seeding (exact)
 
@@ -290,7 +362,7 @@ It is a safety net, not a complete defense. It matches command text and the text
 
 ## Project layout
 
-`board/` and `docs/` do not exist yet. In `server/`, `safety/` holds redaction and the caps today; the allow and deny lists and the audit log come with Phase 7.
+`board/` and `docs/` do not exist yet.
 
 ```
 topic-scope-mcp/
@@ -298,12 +370,13 @@ topic-scope-mcp/
 │   └── src/main/java/.../
 │       ├── kafka/     # Admin API reads, positional record reads, lag
 │       ├── mqtt/      # observation window, retained messages, freshness
-│       ├── safety/    # allow/deny lists, redaction, caps, audit log
-│       └── tools/     # the MCP tools; thin, no broker code
+│       ├── safety/    # allow/deny lists, redaction, caps
+│       └── tools/     # the MCP tools and the audit log; thin, no broker code
 ├── simulator/     # seeds the demo data, then publishes sample traffic; one slow consumer that creates lag on purpose. The only module that publishes
 ├── board/         # optional web status board (React, WebSocket) — Phase 8
-├── compose.yaml   # Kafka (KRaft), Mosquitto and the simulator for local use
-├── mosquitto/     # Mosquitto configuration shared by compose and the tests
+├── compose.yaml   # Kafka (KRaft), Mosquitto and the simulator for local use, with accounts
+├── mosquitto/     # Mosquitto configuration: with accounts for compose (mosquitto.conf, passwd, acl), without for most tests (open.conf)
+├── kafka/         # a login for Kafka's own command-line tools inside the local stack
 ├── docs/          # usage guide (English and Korean), screenshots
 ├── .claude/
 │   ├── settings.json
@@ -326,7 +399,7 @@ Each phase ends with something that can be run and checked. A phase is done when
 - [x] **Phase 4 — Kafka recent messages.** `recent_messages` with positional reads, value formatting, caps and redaction. *Check: the last N records match what was published, and no consumer group appears on the broker afterwards.* (Checked by `KafkaMessagesIT` against the seeded brokers, and by hand against the compose stack with live traffic.)
 - [x] **Phase 5 — Kafka lag.** `list_consumer_groups`, `consumer_lag` with two samples and a status. *Check: the slow consumer is reported as `LAGGING`, a stopped one as `STALLED`.* (Checked by `KafkaLagIT`: exact numbers on the seeded brokers, the statuses on brokers with live traffic; and by hand against the compose stack next to Kafka's own `kafka-consumer-groups.sh`.)
 - [x] **Phase 6 — MQTT.** Observation-window topic list, retained and live messages, `topic_freshness`. *Check: a sensor that the simulator silences turns `STALE`.* (Checked by `MqttIT`: a window that covers the moment the sensor stops reports it `STALE`; afterwards it is `SILENT` when named exactly. And by hand against the compose stack.)
-- [ ] **Phase 7 — Safety hardening.** Allow and deny lists, audit log, timeouts, a read-only broker account in the local stack. *Check: a publish attempt with the server's account is refused by the broker itself.*
+- [x] **Phase 7 — Safety hardening.** Allow and deny lists, audit log, broker logins, a read-only broker account in the local stack. *Check: a publish attempt with the server's account is refused by the broker itself.* (Checked by `SecuredStackIT` for Kafka and MQTT, by `AccessAndAuditIT` for the lists and the log, and by hand against the compose stack.)
 - [ ] **Phase 8 — Web status board (optional).** A small React page that shows the three views and updates over a WebSocket. *Check: stopping the slow consumer changes the board without a reload.*
 - [ ] **Phase 9 — Release.** Docker image, HTTP transport, usage guide in English and Korean, screenshots, `CHANGELOG.md`, `SECURITY.md`, v0.1.0.
 

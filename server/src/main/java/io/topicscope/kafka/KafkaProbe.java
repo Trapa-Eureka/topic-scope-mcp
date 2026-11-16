@@ -1,5 +1,6 @@
 package io.topicscope.kafka;
 
+import io.topicscope.config.TopicScopeProperties.Source;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 import org.apache.kafka.clients.admin.Admin;
@@ -16,9 +17,9 @@ public class KafkaProbe {
   /**
    * @throws Exception when the cluster does not answer within the timeout, or refuses
    */
-  public ClusterInfo describe(String bootstrapServers, Duration timeout) throws Exception {
+  public ClusterInfo describe(Source source, Duration timeout) throws Exception {
     long millis = timeout.toMillis();
-    Admin admin = KafkaClients.admin(bootstrapServers, timeout);
+    Admin admin = KafkaClients.admin(source, timeout);
     try {
       DescribeClusterResult cluster = admin.describeCluster();
       String id = cluster.clusterId().get(millis, TimeUnit.MILLISECONDS);

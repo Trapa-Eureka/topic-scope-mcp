@@ -23,7 +23,7 @@ import org.junit.jupiter.api.Test;
 class MqttToolsTest {
 
   static final TopicScopeProperties PROPERTIES = new TopicScopeProperties(List.of(
-      new Source("k", SourceType.KAFKA, "kafka:9092"), new Source("m", SourceType.MQTT, "tcp://mqtt:1883")), null, null, null);
+      Source.open("k", SourceType.KAFKA, "kafka:9092"), Source.open("m", SourceType.MQTT, "tcp://mqtt:1883")), null, null, null, TopicScopeProperties.Audit.off());
 
   final PretendMqtt broker = new PretendMqtt();
   final PretendCluster cluster = new PretendCluster();

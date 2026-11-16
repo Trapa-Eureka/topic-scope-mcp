@@ -9,9 +9,11 @@ import org.springframework.stereotype.Component;
 public class FreshnessTools {
 
   private final FreshnessService freshness;
+  private final AuditLog audit;
 
-  public FreshnessTools(FreshnessService freshness) {
+  public FreshnessTools(FreshnessService freshness, AuditLog audit) {
     this.freshness = freshness;
+    this.audit = audit;
   }
 
   @McpTool(
@@ -35,6 +37,8 @@ public class FreshnessTools {
       @McpToolParam(description = "Kafka: exact topic name, or leave out for all topics. MQTT: a topic or topic filter ('+' one level, '#' all remaining levels); default '#'. Example: demo/sensors/+/+/telemetry", required = false) String topic,
       @McpToolParam(description = "The longest gap between two messages that is still normal, in seconds. Default 60.", required = false) Integer expectedIntervalSeconds,
       @McpToolParam(description = "MQTT only. Seconds to listen, 1 to 60. Default: twice the expected interval plus one, at least 5 and at most 60.", required = false) Integer windowSeconds) {
-    return freshness.freshness(source, topic, expectedIntervalSeconds, windowSeconds);
+    return audit.record("topic_freshness",
+        AuditLog.args("source", source, "topic", topic, "expectedIntervalSeconds", expectedIntervalSeconds, "windowSeconds", windowSeconds),
+        () -> freshness.freshness(source, topic, expectedIntervalSeconds, windowSeconds));
   }
 }

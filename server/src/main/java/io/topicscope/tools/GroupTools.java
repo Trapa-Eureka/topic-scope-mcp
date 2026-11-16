@@ -9,9 +9,11 @@ import org.springframework.stereotype.Component;
 public class GroupTools {
 
   private final GroupService groups;
+  private final AuditLog audit;
 
-  public GroupTools(GroupService groups) {
+  public GroupTools(GroupService groups, AuditLog audit) {
     this.groups = groups;
+    this.audit = audit;
   }
 
   @McpTool(
@@ -27,7 +29,7 @@ public class GroupTools {
   public GroupService.GroupList listConsumerGroups(
       @McpToolParam(description = "Name of a Kafka source, as returned by list_sources. For example: local-kafka", required = true) String source,
       @McpToolParam(description = "Only groups whose name contains this text (case-insensitive). Leave out for all groups.", required = false) String nameContains) {
-    return groups.listGroups(source, nameContains);
+    return audit.record("list_consumer_groups", AuditLog.args("source", source, "nameContains", nameContains), () -> groups.listGroups(source, nameContains));
   }
 
   @McpTool(
@@ -50,6 +52,7 @@ public class GroupTools {
       @McpToolParam(description = "Exact consumer group name, as returned by list_consumer_groups.", required = true) String group,
       @McpToolParam(description = "Only this topic. Leave out for every topic the group has committed offsets on.", required = false) String topic,
       @McpToolParam(description = "Seconds between the two looks, 1 to 30. Default 5. Use a longer sample for consumers that commit rarely.", required = false) Integer sampleSeconds) {
-    return groups.consumerLag(source, group, topic, sampleSeconds);
+    return audit.record("consumer_lag", AuditLog.args("source", source, "group", group, "topic", topic, "sampleSeconds", sampleSeconds),
+        () -> groups.consumerLag(source, group, topic, sampleSeconds));
   }
 }

@@ -5,6 +5,14 @@
 #   docker compose down -v                   stop and forget everything
 #
 # Every port is published on 127.0.0.1 only. Nothing here is reachable from the network.
+#
+# Both brokers ask for a login, with two accounts each:
+#
+#   simulator   sets the stack up and publishes        password: simulator-local-only
+#   topicscope  may only look (the MCP server's login) password: topicscope-local-only
+#
+# These passwords are not secrets. They exist so the stack shows the set-up a real broker should have:
+# the server logs in with an account that the broker itself keeps from writing. Never reuse them anywhere.
 
 name: topic-scope
 
@@ -13,6 +21,9 @@ services:
     image: apache/kafka:4.3.2
     ports:
       - "127.0.0.1:9092:9092"
+    volumes:
+      # A login for Kafka's own command-line tools, to cross-check the server by hand (see the file).
+      - ./kafka/local-admin.properties:/etc/kafka-client/local-admin.properties:ro
     environment:
       # A single node that is broker and controller at once (KRaft, no ZooKeeper).
       KAFKA_NODE_ID: 1
@@ -22,8 +33,28 @@ services:
       # HOST is for programs on this machine (localhost:9092), INTERNAL for other containers (kafka:19092).
       KAFKA_LISTENERS: HOST://:9092,INTERNAL://:19092,CONTROLLER://:9093
       KAFKA_ADVERTISED_LISTENERS: HOST://localhost:9092,INTERNAL://kafka:19092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: HOST:PLAINTEXT,INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      # Clients log in with a user name and a password (SASL/PLAIN), not encrypted: fine on one machine, not on a network.
+      # CONTROLLER stays without login: its port is not published and only this node talks to itself on it.
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: HOST:SASL_PLAINTEXT,INTERNAL:SASL_PLAINTEXT,CONTROLLER:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_SASL_ENABLED_MECHANISMS: PLAIN
+      KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL: PLAIN
+      # The accounts. "username/password" on INTERNAL is what the broker itself logs in with.
+      KAFKA_LISTENER_NAME_HOST_PLAIN_SASL_JAAS_CONFIG: >-
+        org.apache.kafka.common.security.plain.PlainLoginModule required
+        user_simulator="simulator-local-only"
+        user_topicscope="topicscope-local-only";
+      KAFKA_LISTENER_NAME_INTERNAL_PLAIN_SASL_JAAS_CONFIG: >-
+        org.apache.kafka.common.security.plain.PlainLoginModule required
+        username="simulator" password="simulator-local-only"
+        user_simulator="simulator-local-only"
+        user_topicscope="topicscope-local-only";
+      # Rights are checked by the broker. Without a rule, an account may do nothing.
+      # simulator may do everything; it gives topicscope its look-only rules while seeding (Seeder.lookOnlyRules).
+      # ANONYMOUS is this node on its own CONTROLLER listener, the only listener without a login.
+      KAFKA_AUTHORIZER_CLASS_NAME: org.apache.kafka.metadata.authorizer.StandardAuthorizer
+      KAFKA_SUPER_USERS: User:simulator;User:ANONYMOUS
+      KAFKA_ALLOW_EVERYONE_IF_NO_ACL_FOUND: "false"
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
@@ -31,7 +62,8 @@ services:
       # Only the simulator creates topics, so a typo in a topic name is an error and not a new topic.
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
     healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      # The port answers. Whether the broker is ready for a login is found out by the simulator, which retries.
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/9092'"]
       interval: 5s
       timeout: 10s
       retries: 20
@@ -43,8 +75,10 @@ services:
       - "127.0.0.1:1883:1883"
     volumes:
       - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./mosquitto/passwd:/mosquitto/config/passwd:ro
+      - ./mosquitto/acl:/mosquitto/config/acl:ro
     healthcheck:
-      test: ["CMD-SHELL", "mosquitto_sub -h localhost -t '$$SYS/broker/version' -C 1 -W 3 > /dev/null 2>&1"]
+      test: ["CMD-SHELL", "mosquitto_sub -h localhost -u topicscope -P topicscope-local-only -t '$$SYS/broker/version' -C 1 -W 3 > /dev/null 2>&1"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -60,7 +94,12 @@ services:
         condition: service_healthy
     environment:
       KAFKA_BOOTSTRAP: kafka:19092
+      KAFKA_USERNAME: simulator
+      KAFKA_PASSWORD: simulator-local-only
       MQTT_URI: tcp://mosquitto:1883
+      MQTT_USERNAME: simulator
+      MQTT_PASSWORD: simulator-local-only
+      READ_ONLY_KAFKA_USER: topicscope
       SIM_MODE: ${SIM_MODE:-all}
       SIM_SILENT_AFTER_SECONDS: ${SIM_SILENT_AFTER_SECONDS:-60}
     # In seed mode the simulator exits with 0 when it is done; that must not count as a failure.

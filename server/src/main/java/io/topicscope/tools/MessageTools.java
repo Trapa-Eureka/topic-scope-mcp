@@ -9,9 +9,11 @@ import org.springframework.stereotype.Component;
 public class MessageTools {
 
   private final MessageService messages;
+  private final AuditLog audit;
 
-  public MessageTools(MessageService messages) {
+  public MessageTools(MessageService messages, AuditLog audit) {
     this.messages = messages;
+    this.audit = audit;
   }
 
   @McpTool(
@@ -37,6 +39,8 @@ public class MessageTools {
       @McpToolParam(description = "How many messages to return, newest first. Default 10. The server caps it (100 unless configured otherwise).", required = false) Integer limit,
       @McpToolParam(description = "Kafka only. Read only this partition number. Leave out to get the newest messages over all partitions.", required = false) Integer partition,
       @McpToolParam(description = "MQTT only. Seconds to listen, 1 to 30. Default 3.", required = false) Integer windowSeconds) {
-    return messages.recentMessages(source, topic, limit, partition, windowSeconds);
+    return audit.record("recent_messages",
+        AuditLog.args("source", source, "topic", topic, "limit", limit, "partition", partition, "windowSeconds", windowSeconds),
+        () -> messages.recentMessages(source, topic, limit, partition, windowSeconds));
   }
 }

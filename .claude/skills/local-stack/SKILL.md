@@ -7,6 +7,8 @@ description: Start, check, reset or stop the local Kafka + Mosquitto stack with 
 
 `compose.yaml` runs Kafka (`localhost:9092`), Mosquitto (`localhost:1883`) and the simulator. Ports are on 127.0.0.1 only. Docker must be running.
 
+Both brokers ask for a login. `simulator` / `simulator-local-only` may do everything; `topicscope` / `topicscope-local-only` may only look and is what the server uses (`.mcp.json` carries it; by hand set `TOPIC_SCOPE_KAFKA_USERNAME`, `TOPIC_SCOPE_KAFKA_PASSWORD`, `TOPIC_SCOPE_MQTT_USERNAME`, `TOPIC_SCOPE_MQTT_PASSWORD`). The passwords are demo values, not secrets. The integration tests mostly use brokers without accounts (`mosquitto/open.conf`, plain `KafkaContainer`); `SecuredStackIT` uses the compose settings.
+
 ## Commands
 
 | I want | Command |
@@ -51,14 +53,20 @@ What the MQTT tools show: on a seeded stack `list_topics` lists the four status 
 Use these to cross-check what the server reports. They run inside the containers, so they only ever reach the local stack.
 
 ```bash
-docker compose exec -T kafka /opt/kafka/bin/kafka-get-offsets.sh --bootstrap-server localhost:9092 --topic-partitions 'demo.*'
-docker compose exec -T kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --all-groups
-docker compose exec -T mosquitto mosquitto_sub -h localhost -t 'demo/#' -v -W 3
+C="--bootstrap-server localhost:9092 --command-config /etc/kafka-client/local-admin.properties"
+docker compose exec -T kafka /opt/kafka/bin/kafka-get-offsets.sh $C --topic-partitions 'demo.*'
+docker compose exec -T kafka /opt/kafka/bin/kafka-consumer-groups.sh $C --describe --all-groups
+docker compose exec -T kafka /opt/kafka/bin/kafka-acls.sh $C --list      # the rights of the look-only account
+docker compose exec -T mosquitto mosquitto_sub -h localhost -u simulator -P simulator-local-only -t 'demo/#' -v -W 3
 ```
+
+(In zsh an unquoted `$C` is not split into words; write the options out or use `${=C}`.)
 
 ## When something is off
 
 - **"The broker is half seeded"** in the simulator log: a seed was interrupted. `docker compose down -v` and start again.
+- **Every tool says "no answer within the timeout" or "Not authorized"**: the server has no login, or a wrong one. A Kafka listener that asks for a login does not answer a client that sends none.
+- **A change to `compose.yaml` or to the account files is not picked up**: `docker compose up` recreates the broker only when its definition changed; a recreated broker is empty and is seeded again.
 - **Port 9092 or 1883 already in use**: another broker is running on this machine. Stop it; do not change the ports here without changing the README too.
 - **Image build fails on "Failed to validate Maven distribution SHA-256"**: the build image lost `unzip` (see the comment in `simulator/Dockerfile`).
 - **A topic from `DemoData` is missing on a stack that was already running**: the stack was seeded before the topic was added, and a seeded broker is left alone. `docker compose down -v`, then up again.

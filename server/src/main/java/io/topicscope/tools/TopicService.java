@@ -7,6 +7,7 @@ import io.topicscope.kafka.KafkaTopicReader;
 import io.topicscope.kafka.KafkaTopicReader.PartitionInfo;
 import io.topicscope.kafka.KafkaTopicReader.TopicInfo;
 import io.topicscope.kafka.KafkaTopicReader.TopicName;
+import io.topicscope.safety.TopicAccess;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -103,21 +104,27 @@ public class TopicService {
     boolean internalToo = Boolean.TRUE.equals(includeInternal);
 
     return sources.ask(source, () -> {
-      List<String> matching = kafka.listNames(source.address(), properties.requestTimeout()).stream()
+      TopicAccess access = sources.access(source);
+      List<String> visible = kafka.listNames(source, properties.requestTimeout()).stream()
           .filter(t -> internalToo || !t.internal())
           .map(TopicName::name)
+          .toList();
+      int hidden = (int) visible.stream().filter(name -> !access.permits(name)).count();
+      List<String> matching = visible.stream()
+          .filter(access::permits)
           .filter(name -> filter.isEmpty() || name.toLowerCase(Locale.ROOT).contains(filter))
           .toList();
       List<String> shown = matching.stream().limit(MAX_TOPICS).toList();
       Instant now = clock.instant();
-      List<TopicRow> rows = kafka.describe(source.address(), shown, properties.requestTimeout()).stream().map(t -> row(t, now)).toList();
+      List<TopicRow> rows = kafka.describe(source, shown, properties.requestTimeout()).stream().map(t -> row(t, now)).toList();
 
       String note = "";
       if (matching.size() > shown.size()) {
         note = "Showing the first " + shown.size() + " of " + matching.size() + " matching topics by name. Narrow it down with nameContains.";
       } else if (matching.isEmpty()) {
-        note = filter.isEmpty() ? "This cluster has no topics." : "No topic name contains '" + filter + "'.";
+        note = filter.isEmpty() ? (hidden == 0 ? "This cluster has no topics." : "No topic is available.") : "No topic name contains '" + filter + "'.";
       }
+      note = (note + " " + Sources.hiddenNote(hidden, "topic(s) were")).trim();
       return new TopicList(source.name(), source.type().name(), rows, List.of(), matching.size(), rows.size(), 0, note);
     });
   }
@@ -142,6 +149,7 @@ public class TopicService {
     if (matching.size() > shown.size()) {
       notes.add("Showing the first " + shown.size() + " of " + matching.size() + " topics by name. Narrow it down with filter or nameContains.");
     }
+    if (!heard.hiddenNote().isEmpty()) notes.add(heard.hiddenNote());
     return new TopicList(source.name(), source.type().name(), List.of(), shown, matching.size(), shown.size(), heard.window().seconds(), String.join(" ", notes));
   }
 
@@ -159,7 +167,7 @@ public class TopicService {
       Instant now = clock.instant();
 
       List<PartitionRow> partitions = info.partitions().stream().map(TopicService::partitionRow).toList();
-      List<SettingRow> settings = kafka.settings(source.address(), name, properties.requestTimeout()).orElse(List.of()).stream()
+      List<SettingRow> settings = kafka.settings(source, name, properties.requestTimeout()).orElse(List.of()).stream()
           .filter(s -> s.overridden() || KEY_SETTINGS.contains(s.name()))
           .map(s -> new SettingRow(s.name(), s.value(), s.overridden()))
           .toList();
@@ -181,7 +189,8 @@ public class TopicService {
    * Asks the broker, so call it inside {@link Sources#ask}.
    */
   TopicInfo requireTopic(Source source, String name) throws Exception {
-    List<TopicInfo> found = kafka.describe(source.address(), List.of(name), properties.requestTimeout());
+    sources.requireAllowed(source, name);
+    List<TopicInfo> found = kafka.describe(source, List.of(name), properties.requestTimeout());
     if (found.isEmpty()) throw new ToolProblem("There is no topic named '" + name + "' on source '" + source.name() + "'.", otherTopics(source, name));
     return found.get(0);
   }
@@ -189,7 +198,8 @@ public class TopicService {
   /** Names the topics that do exist, closest matches first, so the caller can correct itself in one step. */
   private String otherTopics(Source source, String name) throws Exception {
     String wanted = name.toLowerCase(Locale.ROOT);
-    List<String> all = kafka.listNames(source.address(), properties.requestTimeout()).stream().filter(t -> !t.internal()).map(TopicName::name).toList();
+    TopicAccess access = sources.access(source);
+    List<String> all = kafka.listNames(source, properties.requestTimeout()).stream().filter(t -> !t.internal()).map(TopicName::name).filter(access::permits).toList();
     List<String> close = all.stream().filter(n -> n.toLowerCase(Locale.ROOT).contains(wanted) || wanted.contains(n.toLowerCase(Locale.ROOT))).limit(10).toList();
     List<String> offered = close.isEmpty() ? all.stream().limit(20).toList() : close;
     String list = offered.isEmpty() ? "The cluster has no topics." : (close.isEmpty() ? "Topics that exist: " : "Did you mean: ") + String.join(", ", offered) + ".";

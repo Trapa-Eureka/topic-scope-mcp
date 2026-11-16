@@ -18,9 +18,15 @@ import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.common.TopicPartition;
+import org.apache.kafka.common.acl.AccessControlEntry;
+import org.apache.kafka.common.acl.AclBinding;
+import org.apache.kafka.common.acl.AclOperation;
+import org.apache.kafka.common.acl.AclPermissionType;
+import org.apache.kafka.common.resource.PatternType;
+import org.apache.kafka.common.resource.ResourcePattern;
+import org.apache.kafka.common.resource.ResourceType;
 import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.eclipse.paho.client.mqttv3.MqttClient;
-import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 
@@ -35,17 +41,26 @@ public final class Seeder {
   /** What a call to {@link #seed} did. */
   public enum Result { SEEDED, ALREADY_SEEDED }
 
+  /** Seeds brokers that ask for no login. */
   public static Result seed(String kafkaBootstrap, String mqttUri) throws Exception {
-    Result result = seedKafka(kafkaBootstrap);
-    seedMqtt(mqttUri);
+    return seed(Stack.open(kafkaBootstrap, mqttUri), null);
+  }
+
+  /**
+   * @param readOnlyKafkaUser when not null, this Kafka user is given the rights a look-only client needs and
+   *     no others: describe and read every topic, describe every group, describe the cluster. The simulator's
+   *     own account must be allowed to create access rules for this to work
+   */
+  public static Result seed(Stack stack, String readOnlyKafkaUser) throws Exception {
+    Result result = seedKafka(stack, readOnlyKafkaUser);
+    seedMqtt(stack);
     return result;
   }
 
   // ---------- Kafka ----------
 
-  static Result seedKafka(String bootstrap) throws Exception {
-    Properties adminProps = new Properties();
-    adminProps.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrap);
+  static Result seedKafka(Stack stack, String readOnlyKafkaUser) throws Exception {
+    Properties adminProps = stack.kafka();
     adminProps.put(AdminClientConfig.CLIENT_ID_CONFIG, "topic-scope-simulator-seed");
 
     try (Admin admin = Admin.create(adminProps)) {
@@ -67,8 +82,9 @@ public final class Seeder {
               .configs(t.compacted() ? Map.of("cleanup.policy", "compact") : Map.of("retention.ms", "-1")))
           .toList();
       admin.createTopics(topics).all().get();
+      if (readOnlyKafkaUser != null) admin.createAcls(lookOnlyRules(readOnlyKafkaUser)).all().get();
 
-      publishSeedRecords(bootstrap);
+      publishSeedRecords(stack);
 
       for (DemoData.GroupSpec g : DemoData.GROUPS) {
         Map<TopicPartition, OffsetAndMetadata> offsets = new HashMap<>();
@@ -83,9 +99,29 @@ public final class Seeder {
 
   private record GroupSpecMarker(String group, TopicPartition partition) {}
 
-  private static void publishSeedRecords(String bootstrap) throws InterruptedException, ExecutionException {
-    Properties props = new Properties();
-    props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrap);
+  /**
+   * What a client needs to list topics, read records by position, list groups and compare their offsets,
+   * and nothing that changes anything: no Write, Create, Delete or Alter on any resource.
+   */
+  static List<AclBinding> lookOnlyRules(String user) {
+    String principal = "User:" + user;
+    ResourcePattern everyTopic = new ResourcePattern(ResourceType.TOPIC, "*", PatternType.LITERAL);
+    ResourcePattern everyGroup = new ResourcePattern(ResourceType.GROUP, "*", PatternType.LITERAL);
+    ResourcePattern cluster = new ResourcePattern(ResourceType.CLUSTER, "kafka-cluster", PatternType.LITERAL);
+    return List.of(
+        allow(principal, everyTopic, AclOperation.DESCRIBE),
+        allow(principal, everyTopic, AclOperation.DESCRIBE_CONFIGS),
+        allow(principal, everyTopic, AclOperation.READ),
+        allow(principal, everyGroup, AclOperation.DESCRIBE),
+        allow(principal, cluster, AclOperation.DESCRIBE));
+  }
+
+  private static AclBinding allow(String principal, ResourcePattern resource, AclOperation operation) {
+    return new AclBinding(resource, new AccessControlEntry(principal, "*", operation, AclPermissionType.ALLOW));
+  }
+
+  private static void publishSeedRecords(Stack stack) throws InterruptedException, ExecutionException {
+    Properties props = stack.kafka();
     props.put(ProducerConfig.CLIENT_ID_CONFIG, "topic-scope-simulator-seed");
     props.put(ProducerConfig.ACKS_CONFIG, "all");
     props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
@@ -108,12 +144,9 @@ public final class Seeder {
   // ---------- MQTT ----------
 
   /** One retained status message per device. Publishing it again replaces it, so this is repeatable. */
-  static void seedMqtt(String mqttUri) throws MqttException {
-    MqttClient client = new MqttClient(mqttUri, "topic-scope-simulator-seed", new MemoryPersistence());
-    MqttConnectOptions options = new MqttConnectOptions();
-    options.setCleanSession(true);
-    options.setConnectionTimeout(10);
-    client.connect(options);
+  static void seedMqtt(Stack stack) throws MqttException {
+    MqttClient client = new MqttClient(stack.mqttUri(), "topic-scope-simulator-seed", new MemoryPersistence());
+    client.connect(stack.mqtt());
     try {
       for (DemoData.Device d : DemoData.DEVICES) {
         client.publish(d.statusTopic(), d.statusJson().getBytes(StandardCharsets.UTF_8), 1, true);

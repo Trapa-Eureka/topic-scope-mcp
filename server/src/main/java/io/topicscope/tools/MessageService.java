@@ -105,7 +105,7 @@ public class MessageService {
       TopicInfo info = topics.requireTopic(source, name);
       List<Integer> readable = readablePartitions(info, partition, notes);
 
-      Tail tail = reader.tail(source.address(), name, readable, applied, properties.requestTimeout());
+      Tail tail = reader.tail(source, name, readable, applied, properties.requestTimeout());
       List<MessageRow> rows = rows(tail.records(), RawRecord::value, (record, value) -> row(name, record, value), notes);
 
       if (!tail.complete()) {
@@ -134,6 +134,7 @@ public class MessageService {
     } else if (heard.totalMessages() > rows.size()) {
       notes.add(heard.totalMessages() + " messages arrived; the newest " + rows.size() + " are shown.");
     }
+    if (!heard.hiddenNote().isEmpty()) notes.add(heard.hiddenNote());
     return new MessageList(source.name(), source.type().name(), topicFilter, rows, rows.size(), limit, heard.window().seconds(), String.join(" ", notes));
   }
 

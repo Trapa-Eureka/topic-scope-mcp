@@ -1,15 +1,13 @@
 package io.topicscope.mqtt;
 
+import io.topicscope.config.TopicScopeProperties.Source;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.eclipse.paho.client.mqttv3.MqttClient;
-import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
-import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 import org.springframework.stereotype.Component;
 
 /**
@@ -32,24 +30,15 @@ public class MqttProbe {
   /**
    * @throws MqttException when the broker does not accept the connection within the timeout
    */
-  public BrokerInfo connect(String uri, Duration timeout) throws MqttException {
-    MqttClient client = new MqttClient(uri, "topic-scope-" + UUID.randomUUID(), new MemoryPersistence());
-    MqttConnectOptions options = new MqttConnectOptions();
-    options.setCleanSession(true);
-    options.setAutomaticReconnect(false);
-    options.setConnectionTimeout((int) Math.max(1, timeout.toSeconds()));
-    client.setTimeToWait(timeout.toMillis());
+  public BrokerInfo connect(Source source, Duration timeout) throws MqttException {
+    MqttClient client = MqttClients.client(source, timeout);
     try {
-      client.connect(options);
+      client.connect(MqttClients.options(source, timeout));
       CompletableFuture<String> version = new CompletableFuture<>();
       client.subscribe(VERSION_TOPIC, 0, (topic, message) -> version.complete(new String(message.getPayload(), StandardCharsets.UTF_8)));
       return new BrokerInfo(await(version));
     } finally {
-      try {
-        if (client.isConnected()) client.disconnect(1000);
-      } finally {
-        client.close(true);
-      }
+      MqttClients.close(client);
     }
   }
 

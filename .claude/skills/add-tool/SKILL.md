@@ -31,6 +31,9 @@ public SomeRecord name(@McpToolParam(description = "...", required = true) Strin
 - Imports are `org.springframework.ai.mcp.annotation.*` (not the old `org.springaicommunity` package).
 - `McpServerIT` asserts for **every** tool: a description, `readOnlyHint = true`, `destructiveHint = false`, an output schema.
 - Return a record. **No field may be null**: the generated schema marks every field required, so use `""`, `0` or an empty list, and say in the Javadoc what empty means.
+- Wrap the whole body of the `@McpTool` method in `audit.record("tool_name", AuditLog.args("source", source, ...), () -> service.call(...))`. Arguments only, never results. `AccessAndAuditIT` checks that each tool leaves a line.
+- Before a topic named by the caller is looked at, call `sources.requireAllowed(source, topic)` (`TopicService.requireTopic` does it). In lists, filter with `sources.access(source).permits(name)` and say how many were left out with `Sources.hiddenNote`. Never offer a hidden topic as a suggestion. `MqttService.listen` drops hidden topics on arrival.
+- Readers take the `Source`, not an address: the login travels with it. Kafka clients come from `KafkaClients`, MQTT clients from `MqttClients`.
 - Resolve the source with `Sources.require(name)` and wrap every broker question in `Sources.ask(source, () -> ...)`. It turns any failure, including a `LinkageError`, into a `ToolProblem`. An `Error` that escapes kills the call without any answer.
 - A call that cannot be answered throws `new ToolProblem(problem, hint)`: one sentence for what is wrong, one for what would work (the names that exist, the tool to call instead). Spring AI prints the message, a line break and the root cause's message, so a plain exception shows its message twice; `ToolProblem` carries the hint as its cause for that reason. Never throw anything else on purpose.
 - `list_sources` is the exception: there an unreachable broker is a row, because reachability is the answer.
@@ -54,11 +57,15 @@ public SomeRecord name(@McpToolParam(description = "...", required = true) Strin
 
 `ReadOnlyArchitectureTest` lists the broker-client methods the server may call (`CONSUMER_READS`, `ADMIN_READS`, `MQTT_READS`). If a new tool needs a method that is not listed, the build fails. Add the method only if it cannot change the broker, and say why in the commit. Never add: `subscribe`/`commit*`/`committed` on a Kafka consumer, any `create*`/`delete*`/`alter*` on the admin client, `publish` on MQTT. Kafka records are read with `assign` + `seek`, without a `group.id`, with auto-commit off.
 
+## Configuration records
+
+`TopicScopeProperties` and its nested records are bound by Spring Boot through their one constructor. **Do not add a second constructor to any of them**: the server then fails to start with a binding error, and only the packaged jar shows it. Use a static factory (`Source.open(...)`) for tests.
+
 ## Tests, in this order
 
 1. Unit test for the pure parts (formatting, status rules) next to the class.
 2. A new `*IT` built like `KafkaTopicsIT`: `McpTestSupport.connect()` starts the packaged jar as a child process against brokers that are already seeded (once per run, seed only, no live traffic); `call(...)` returns the structured result, `callExpectingProblem(...)` the error text. Compare with the constants in `DemoData`; do not copy numbers into the test. Add the tool's name to the list in `McpServerIT`. Tests must not change the brokers, they are shared.
-3. `./mvnw verify`.
+3. `./mvnw verify`. (`./mvnw -DskipTests install` only builds, in seconds; the parent pom makes it skip the integration tests too.)
 
 ## Talking to the packaged server by hand
 

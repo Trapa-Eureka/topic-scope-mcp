@@ -9,9 +9,11 @@ import org.springframework.stereotype.Component;
 public class TopicTools {
 
   private final TopicService topics;
+  private final AuditLog audit;
 
-  public TopicTools(TopicService topics) {
+  public TopicTools(TopicService topics, AuditLog audit) {
     this.topics = topics;
+    this.audit = audit;
   }
 
   @McpTool(
@@ -35,7 +37,9 @@ public class TopicTools {
       @McpToolParam(description = "Kafka only. Also list the broker's internal topics such as __consumer_offsets. Default: false.", required = false) Boolean includeInternal,
       @McpToolParam(description = "MQTT only. Topic filter to listen on: '+' is one level, '#' all remaining levels. Default '#', every topic not starting with '$'. Example: demo/sensors/#", required = false) String filter,
       @McpToolParam(description = "MQTT only. Seconds to listen, 1 to 30. Default 3. Topics that publish less often than this may be missed.", required = false) Integer windowSeconds) {
-    return topics.listTopics(source, nameContains, includeInternal, filter, windowSeconds);
+    return audit.record("list_topics",
+        AuditLog.args("source", source, "nameContains", nameContains, "includeInternal", includeInternal, "filter", filter, "windowSeconds", windowSeconds),
+        () -> topics.listTopics(source, nameContains, includeInternal, filter, windowSeconds));
   }
 
   @McpTool(
@@ -52,6 +56,6 @@ public class TopicTools {
   public TopicService.TopicDetail describeTopic(
       @McpToolParam(description = "Name of a Kafka source, as returned by list_sources. For example: local-kafka", required = true) String source,
       @McpToolParam(description = "Exact topic name, as returned by list_topics.", required = true) String topic) {
-    return topics.describeTopic(source, topic);
+    return audit.record("describe_topic", AuditLog.args("source", source, "topic", topic), () -> topics.describeTopic(source, topic));
   }
 }

@@ -97,7 +97,7 @@ public class GroupService {
     String filter = nameContains == null ? "" : nameContains.trim().toLowerCase(Locale.ROOT);
 
     return sources.ask(source, () -> {
-      List<GroupRow> matching = groups.list(source.address(), properties.requestTimeout()).stream()
+      List<GroupRow> matching = groups.list(source, properties.requestTimeout()).stream()
           .filter(g -> filter.isEmpty() || g.group().toLowerCase(Locale.ROOT).contains(filter))
           .map(g -> new GroupRow(g.group(), g.state(), g.members()))
           .toList();
@@ -119,6 +119,7 @@ public class GroupService {
     if (group == null || group.isBlank()) throw new ToolProblem("The 'group' argument is missing.", "Call list_consumer_groups to see the names.");
     String groupName = group.trim();
     String topicFilter = topic == null || topic.isBlank() ? null : topic.trim();
+    if (topicFilter != null) sources.requireAllowed(source, topicFilter);
     int seconds = sampleSeconds == null ? DEFAULT_SAMPLE_SECONDS : sampleSeconds;
     if (seconds < 1 || seconds > MAX_SAMPLE_SECONDS) {
       throw new ToolProblem("'sampleSeconds' must be between 1 and " + MAX_SAMPLE_SECONDS + ", and it was " + seconds + ".",
@@ -126,7 +127,7 @@ public class GroupService {
     }
 
     return sources.ask(source, () -> {
-      var two = groups.sampleTwice(source.address(), groupName, Duration.ofSeconds(seconds), properties.requestTimeout());
+      var two = groups.sampleTwice(source, groupName, Duration.ofSeconds(seconds), properties.requestTimeout());
       if (two.isEmpty()) {
         throw new ToolProblem("There is no consumer group named '" + groupName + "' on source '" + source.name() + "'.", otherGroups(source, groupName));
       }
@@ -136,10 +137,20 @@ public class GroupService {
 
   private LagReport report(Source source, String group, String topicFilter, TwoSamples two) {
     GroupInfo info = two.second().group();
+    var access = sources.access(source);
     Map<Partition, Offsets> first = two.first().offsets();
-    Map<Partition, Offsets> second = two.second().offsets();
+    Map<Partition, Offsets> second = new HashMap<>(two.second().offsets());
+    // A group may read topics this server must not show. Their partitions are taken out before anything is added up or read.
+    TreeSet<String> hiddenTopics = new TreeSet<>();
+    second.keySet().removeIf(p -> {
+      if (access.permits(p.topic())) return false;
+      hiddenTopics.add(p.topic());
+      return true;
+    });
     double sampleSeconds = Math.round(two.between().toMillis() / 100.0) / 10.0;
     List<String> notes = new ArrayList<>();
+    String hidden = Sources.hiddenNote(hiddenTopics.size(), "topic(s) this group reads were");
+    if (!hidden.isEmpty()) notes.add(hidden);
 
     TreeSet<String> allTopics = new TreeSet<>();
     second.keySet().forEach(p -> allTopics.add(p.topic()));
@@ -151,7 +162,8 @@ public class GroupService {
     List<Partition> partitions = second.keySet().stream().filter(p -> topicFilter == null || p.topic().equals(topicFilter)).sorted().toList();
     if (partitions.isEmpty()) {
       return new LagReport(source.name(), group, info.state(), info.members(), sampleSeconds, 0, 0, LagStatus.OK.name(),
-          "The group has not committed any offset, so there is nothing to measure its lag against.", List.of(), List.of(), "");
+          "The group has not committed any offset" + (hiddenTopics.isEmpty() ? "" : " on a topic that is available")
+              + ", so there is nothing to measure its lag against.", List.of(), List.of(), String.join(" ", notes));
     }
 
     Map<Partition, Long> ages = oldestUnreadAges(source, partitions, second, notes);
@@ -214,7 +226,7 @@ public class GroupService {
     }
     Map<Partition, Long> ages = new HashMap<>();
     long now = clock.millis();
-    records.timestampsAt(source.address(), ask, properties.requestTimeout())
+    records.timestampsAt(source, ask, properties.requestTimeout())
         .forEach((p, timestamp) -> ages.put(p, timestamp < 0 ? -1 : Math.max(0, (now - timestamp) / 1000)));
     return ages;
   }
@@ -247,7 +259,7 @@ public class GroupService {
 
   private String otherGroups(Source source, String name) throws Exception {
     String wanted = name.toLowerCase(Locale.ROOT);
-    List<String> all = groups.list(source.address(), properties.requestTimeout()).stream().map(GroupInfo::group).toList();
+    List<String> all = groups.list(source, properties.requestTimeout()).stream().map(GroupInfo::group).toList();
     List<String> close = all.stream().filter(n -> n.toLowerCase(Locale.ROOT).contains(wanted) || wanted.contains(n.toLowerCase(Locale.ROOT))).limit(10).toList();
     if (all.isEmpty()) return "The cluster has no consumer groups.";
     if (!close.isEmpty()) return "Did you mean: " + String.join(", ", close) + ".";

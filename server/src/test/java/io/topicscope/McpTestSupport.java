@@ -36,7 +36,7 @@ final class McpTestSupport {
   static final KafkaContainer KAFKA = new KafkaContainer("apache/kafka:4.3.2");
   static final GenericContainer<?> MOSQUITTO = new GenericContainer<>("eclipse-mosquitto:2.0.22")
       .withExposedPorts(1883)
-      .withCopyFileToContainer(MountableFile.forHostPath(Path.of("..", "mosquitto", "mosquitto.conf").toAbsolutePath().normalize()),
+      .withCopyFileToContainer(MountableFile.forHostPath(Path.of("..", "mosquitto", "open.conf").toAbsolutePath().normalize()),
           "/mosquitto/config/mosquitto.conf");
 
   static final String KAFKA_ADDRESS;
@@ -60,11 +60,21 @@ final class McpTestSupport {
     return connect(KAFKA_ADDRESS, MQTT_ADDRESS);
   }
 
+  /** Where the servers started by the tests record their calls: a file of this test run, never the developer's own. */
+  static final Path AUDIT_FILE = temporaryAuditFile();
+
   static McpSyncClient connect(String kafka, String mqtt) {
-    ServerParameters parameters = ServerParameters.builder(javaBinary())
-        .args("-jar", serverJar(), "--topic-scope.probe-timeout=3s")
-        .env(Map.of("TOPIC_SCOPE_KAFKA", kafka, "TOPIC_SCOPE_MQTT", mqtt))
-        .build();
+    return connect(Map.of("TOPIC_SCOPE_KAFKA", kafka, "TOPIC_SCOPE_MQTT", mqtt));
+  }
+
+  /** A server with the given environment on top of the defaults; extra arguments are Spring settings such as {@code --topic-scope.x=y}. */
+  static McpSyncClient connect(Map<String, String> environment, String... extraArguments) {
+    Map<String, String> env = new java.util.HashMap<>(Map.of("TOPIC_SCOPE_KAFKA", KAFKA_ADDRESS, "TOPIC_SCOPE_MQTT", MQTT_ADDRESS,
+        "TOPIC_SCOPE_AUDIT_FILE", AUDIT_FILE.toString()));
+    env.putAll(environment);
+    List<String> arguments = new java.util.ArrayList<>(List.of("-jar", serverJar(), "--topic-scope.probe-timeout=3s"));
+    arguments.addAll(List.of(extraArguments));
+    ServerParameters parameters = ServerParameters.builder(javaBinary()).args(arguments).env(env).build();
     McpSyncClient client = McpClient.sync(new StdioClientTransport(parameters, McpJsonDefaults.getMapper()))
         .requestTimeout(Duration.ofSeconds(60))
         .build();
@@ -104,6 +114,14 @@ final class McpTestSupport {
   /** JSON numbers arrive as Integer or Long depending on their size; tests compare them as long. */
   static long number(Object value) {
     return ((Number) value).longValue();
+  }
+
+  private static Path temporaryAuditFile() {
+    try {
+      return Files.createTempDirectory("topic-scope-it").resolve("audit.jsonl");
+    } catch (java.io.IOException e) {
+      throw new IllegalStateException(e);
+    }
   }
 
   static String javaBinary() {

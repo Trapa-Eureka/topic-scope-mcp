@@ -106,9 +106,13 @@ public class FreshnessService {
       List<TopicInfo> infos;
       List<String> notes = new ArrayList<>();
       if (topic == null || topic.isBlank()) {
-        List<String> names = kafka.listNames(source.address(), properties.requestTimeout()).stream().filter(t -> !t.internal()).map(TopicName::name).toList();
+        var access = sources.access(source);
+        List<String> visible = kafka.listNames(source, properties.requestTimeout()).stream().filter(t -> !t.internal()).map(TopicName::name).toList();
+        List<String> names = visible.stream().filter(access::permits).toList();
+        String hidden = Sources.hiddenNote(visible.size() - names.size(), "topic(s) were");
+        if (!hidden.isEmpty()) notes.add(hidden);
         if (names.size() > MAX_TOPICS) notes.add("Showing the first " + MAX_TOPICS + " of " + names.size() + " topics by name. Name one topic to check it alone.");
-        infos = kafka.describe(source.address(), names.stream().limit(MAX_TOPICS).toList(), properties.requestTimeout());
+        infos = kafka.describe(source, names.stream().limit(MAX_TOPICS).toList(), properties.requestTimeout());
       } else {
         infos = List.of(topics.requireTopic(source, topic.trim()));
       }
@@ -156,6 +160,7 @@ public class FreshnessService {
           + "may not have had the chance to be heard. Use a longer windowSeconds before trusting SILENT.");
     }
     if (rows.size() > shown.size()) notes.add("Showing the first " + shown.size() + " of " + rows.size() + " topics by name.");
+    if (!heard.hiddenNote().isEmpty()) notes.add(heard.hiddenNote());
     return report(source, expected, heard.window().seconds(), shown, heard.brokerCounters(), notes);
   }
 

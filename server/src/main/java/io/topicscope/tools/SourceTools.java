@@ -8,9 +8,11 @@ import org.springframework.stereotype.Component;
 public class SourceTools {
 
   private final SourceService sources;
+  private final AuditLog audit;
 
-  public SourceTools(SourceService sources) {
+  public SourceTools(SourceService sources, AuditLog audit) {
     this.sources = sources;
+    this.audit = audit;
   }
 
   @McpTool(
@@ -24,6 +26,6 @@ public class SourceTools {
       generateOutputSchema = true,
       annotations = @McpTool.McpAnnotations(title = "List sources", readOnlyHint = true, destructiveHint = false, idempotentHint = true, openWorldHint = true))
   public SourceService.SourceList listSources() {
-    return sources.listSources();
+    return audit.record("list_sources", AuditLog.args(), sources::listSources);
   }
 }

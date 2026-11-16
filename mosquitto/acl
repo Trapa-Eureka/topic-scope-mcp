@@ -1,0 +1,13 @@
+# Who may do what on the local MQTT broker. Anything not listed is refused.
+#
+# Note: an MQTT 3.1.1 broker does not tell a client that a publish was refused. It accepts the
+# packet and drops the message. The integration test checks that the message never arrives.
+
+# The simulator fills the broker and bridges readings to Kafka.
+user simulator
+topic readwrite #
+
+# The MCP server's account: it may listen, and nothing else.
+user topicscope
+topic read #
+topic read $SYS/#

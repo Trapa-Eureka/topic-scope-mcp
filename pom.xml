@@ -21,6 +21,11 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
+    <!-- -DskipTests skips the integration tests too. The failsafe plugin only listens to skipITs,
+         so without this a "build only" would still start brokers in Docker and take minutes. -->
+    <skipTests>false</skipTests>
+    <skipITs>${skipTests}</skipITs>
+
     <!-- Same version as the apache/kafka image in compose.yaml and in the tests. -->
     <kafka.version>4.3.2</kafka.version>
     <paho.version>1.2.5</paho.version>

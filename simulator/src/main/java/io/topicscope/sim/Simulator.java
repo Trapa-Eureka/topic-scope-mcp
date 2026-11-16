@@ -13,6 +13,9 @@ import java.util.concurrent.CountDownLatch;
  *   <li>{@code SIM_MODE}: {@code all} (default; seed, then live traffic), {@code seed} (seed and exit, the
  *       state stays exactly as {@link DemoData} describes), {@code live} (live traffic on a seeded stack)</li>
  *   <li>{@code SIM_SILENT_AFTER_SECONDS} (default 60): when the silent sensor stops publishing</li>
+ *   <li>{@code KAFKA_USERNAME}, {@code KAFKA_PASSWORD}, {@code MQTT_USERNAME}, {@code MQTT_PASSWORD}: the simulator's
+ *       own logins, for brokers that ask for one</li>
+ *   <li>{@code READ_ONLY_KAFKA_USER}: a Kafka user that is given look-only rights while seeding (the server's account)</li>
  * </ul>
  */
 public final class Simulator {
@@ -26,10 +29,15 @@ public final class Simulator {
     if (!mode.equals("all") && !mode.equals("seed") && !mode.equals("live")) {
       throw new IllegalArgumentException("SIM_MODE must be all, seed or live, not: " + mode);
     }
-    log("mode=" + mode + " kafka=" + kafka + " mqtt=" + mqtt);
+    Stack stack = new Stack(kafka, Stack.Login.of(System.getenv("KAFKA_USERNAME"), System.getenv("KAFKA_PASSWORD")),
+        mqtt, Stack.Login.of(System.getenv("MQTT_USERNAME"), System.getenv("MQTT_PASSWORD")));
+    String readOnlyKafkaUser = env("READ_ONLY_KAFKA_USER", "");
+    log("mode=" + mode + " kafka=" + kafka + " mqtt=" + mqtt
+        + (stack.kafkaLogin() == null ? "" : " kafka-user=" + stack.kafkaLogin().username())
+        + (stack.mqttLogin() == null ? "" : " mqtt-user=" + stack.mqttLogin().username()));
 
     if (!mode.equals("live")) {
-      Seeder.Result result = seedWhenBrokersAnswer(kafka, mqtt);
+      Seeder.Result result = seedWhenBrokersAnswer(stack, readOnlyKafkaUser.isEmpty() ? null : readOnlyKafkaUser);
       log(result == Seeder.Result.SEEDED ? "seeded:" : "already seeded, left as it is. A fresh seed looks like this:");
       for (DemoData.TopicSpec t : DemoData.TOPICS) {
         log("  topic " + t.name() + "  partitions=" + t.partitions() + "  records=" + t.seededTotal());
@@ -38,6 +46,7 @@ public final class Simulator {
         log("  group " + g.group() + "  topic=" + g.topic().name() + "  lag=" + g.seededLagTotal());
       }
       log("  mqtt  " + DemoData.DEVICES.size() + " retained status messages under demo/sensors/");
+      if (!readOnlyKafkaUser.isEmpty()) log("  kafka user " + readOnlyKafkaUser + " may describe and read, and nothing else");
     }
     if (mode.equals("seed")) return;
 
@@ -46,7 +55,7 @@ public final class Simulator {
     LiveTraffic.Timing timing = new LiveTraffic.Timing(defaults.positionInterval(), defaults.telemetryInterval(), defaults.trackerPause(), silentAfter);
 
     CountDownLatch stop = new CountDownLatch(1);
-    LiveTraffic live = LiveTraffic.start(kafka, mqtt, timing);
+    LiveTraffic live = LiveTraffic.start(stack, timing);
     Runtime.getRuntime().addShutdownHook(new Thread(() -> {
       live.close();
       stop.countDown();
@@ -56,11 +65,11 @@ public final class Simulator {
   }
 
   /** The brokers may still be starting, so try for up to a minute. */
-  private static Seeder.Result seedWhenBrokersAnswer(String kafka, String mqtt) throws Exception {
+  private static Seeder.Result seedWhenBrokersAnswer(Stack stack, String readOnlyKafkaUser) throws Exception {
     Exception last = null;
     for (int attempt = 1; attempt <= 30; attempt++) {
       try {
-        return Seeder.seed(kafka, mqtt);
+        return Seeder.seed(stack, readOnlyKafkaUser);
       } catch (IllegalStateException e) {
         throw e; // half seeded: waiting does not help
       } catch (Exception e) {

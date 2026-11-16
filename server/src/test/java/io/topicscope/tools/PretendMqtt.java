@@ -1,6 +1,7 @@
 package io.topicscope.tools;
 
 import io.topicscope.mqtt.MqttObserver;
+import io.topicscope.config.TopicScopeProperties.Source;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -28,7 +29,7 @@ final class PretendMqtt extends MqttObserver {
   }
 
   @Override
-  public Window observe(String uri, List<String> filters, Duration window, Duration timeout, Sink sink) {
+  public Window observe(Source source, List<String> filters, Duration window, Duration timeout, Sink sink) {
     if (filters.get(0).contains("#/")) throw new IllegalArgumentException("Invalid usage of multi-level wildcard in topic string: " + filters.get(0));
     askedFilters = filters;
     askedWindow = window;

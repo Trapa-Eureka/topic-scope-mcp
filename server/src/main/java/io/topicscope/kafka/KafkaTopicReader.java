@@ -1,5 +1,6 @@
 package io.topicscope.kafka;
 
+import io.topicscope.config.TopicScopeProperties.Source;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -96,8 +97,8 @@ public class KafkaTopicReader {
   public record TopicName(String name, boolean internal) {}
 
   /** Every name in the catalog. Sorted by name. */
-  public List<TopicName> listNames(String bootstrapServers, Duration timeout) throws Exception {
-    Admin admin = KafkaClients.admin(bootstrapServers, timeout);
+  public List<TopicName> listNames(Source source, Duration timeout) throws Exception {
+    Admin admin = KafkaClients.admin(source, timeout);
     try {
       return names(admin, timeout).stream().map(t -> new TopicName(t.name(), t.isInternal())).toList();
     } finally {
@@ -106,9 +107,9 @@ public class KafkaTopicReader {
   }
 
   /** The given topics with partitions and offsets. Names that do not exist are left out. Sorted by name. */
-  public List<TopicInfo> describe(String bootstrapServers, Collection<String> topicNames, Duration timeout) throws Exception {
+  public List<TopicInfo> describe(Source source, Collection<String> topicNames, Duration timeout) throws Exception {
     if (topicNames.isEmpty()) return List.of();
-    Admin admin = KafkaClients.admin(bootstrapServers, timeout);
+    Admin admin = KafkaClients.admin(source, timeout);
     try {
       Map<String, Boolean> internal = new HashMap<>();
       for (TopicListing t : names(admin, timeout)) internal.put(t.name(), t.isInternal());
@@ -154,8 +155,8 @@ public class KafkaTopicReader {
   }
 
   /** The settings of one topic, sorted by name. Empty when the topic does not exist. */
-  public Optional<List<Setting>> settings(String bootstrapServers, String topic, Duration timeout) throws Exception {
-    Admin admin = KafkaClients.admin(bootstrapServers, timeout);
+  public Optional<List<Setting>> settings(Source source, String topic, Duration timeout) throws Exception {
+    Admin admin = KafkaClients.admin(source, timeout);
     try {
       if (names(admin, timeout).stream().noneMatch(t -> t.name().equals(topic))) return Optional.empty();
       ConfigResource resource = new ConfigResource(ConfigResource.Type.TOPIC, topic);

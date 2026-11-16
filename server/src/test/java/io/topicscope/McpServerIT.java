@@ -74,6 +74,7 @@ class McpServerIT {
     ProcessBuilder builder = new ProcessBuilder(McpTestSupport.javaBinary(), "-jar", McpTestSupport.serverJar());
     builder.environment().put("TOPIC_SCOPE_KAFKA", KAFKA_ADDRESS);
     builder.environment().put("TOPIC_SCOPE_MQTT", MQTT_ADDRESS);
+    builder.environment().put("TOPIC_SCOPE_AUDIT_FILE", McpTestSupport.AUDIT_FILE.toString());
     builder.redirectError(ProcessBuilder.Redirect.DISCARD);
     Process server = builder.start();
     try {

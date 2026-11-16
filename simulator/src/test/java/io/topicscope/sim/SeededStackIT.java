@@ -51,7 +51,7 @@ class SeededStackIT {
   static final KafkaContainer kafka = new KafkaContainer(KAFKA_IMAGE);
   static final GenericContainer<?> mosquitto = new GenericContainer<>(MOSQUITTO_IMAGE)
       .withExposedPorts(1883)
-      .withCopyFileToContainer(MountableFile.forHostPath(Path.of("..", "mosquitto", "mosquitto.conf").toAbsolutePath().normalize()),
+      .withCopyFileToContainer(MountableFile.forHostPath(Path.of("..", "mosquitto", "open.conf").toAbsolutePath().normalize()),
           "/mosquitto/config/mosquitto.conf");
 
   static String bootstrap;
