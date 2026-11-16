@@ -83,7 +83,9 @@ docker compose up -d --build --wait
 }
 ```
 
-컨테이너 안에서 `localhost`는 컨테이너 자신이므로, 브로커는 compose 네트워크상의 이름(`kafka:19092`, `mosquitto:1883`)으로 지정합니다. 이미지는 손으로 요청을 보내는 방식으로 확인했고, 위처럼 Claude Code에 등록하는 것은 해 보지 않았습니다.
+컨테이너 안에서 `localhost`는 컨테이너 자신이므로, 브로커는 compose 네트워크상의 이름(`kafka:19092`, `mosquitto:1883`)으로 지정합니다. Claude Code 2.1.325에서 정확히 이 설정을 `--mcp-config`로 넘겨 확인했습니다. Claude Code가 컨테이너를 띄웠고, 서버가 연결됨으로 표시되며 도구 일곱 개가 보였고, `list_sources`, `list_topics`, `recent_messages`를 호출해 응답을 받았으며, 세션이 끝나자 컨테이너도 사라졌습니다.
+
+이렇게 띄운 컨테이너의 감사 로그는 컨테이너와 함께 사라집니다(`--rm`). 보존하려면 이미지 이름 앞에 `"-v", "topic-scope-audit:/data"`를 추가합니다.
 
 ### 다른 클라이언트
 

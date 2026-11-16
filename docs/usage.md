@@ -83,7 +83,9 @@ The same, with Docker as the command. `-i` is required: without it the server ha
 }
 ```
 
-Inside a container `localhost` is the container itself, so the brokers are addressed by their names on the compose network (`kafka:19092`, `mosquitto:1883`). The image was tried this way with requests typed by hand; registering it in Claude Code as above has not been tried.
+Inside a container `localhost` is the container itself, so the brokers are addressed by their names on the compose network (`kafka:19092`, `mosquitto:1883`). Tried with Claude Code 2.1.325, with exactly this configuration given through `--mcp-config`: Claude Code started the container, the server showed as connected with its seven tools, `list_sources`, `list_topics` and `recent_messages` were called and answered, and when the session ended the container was gone.
+
+The audit log of such a container is lost with it (`--rm`). To keep it, add `"-v", "topic-scope-audit:/data"` before the image name.
 
 ### Other clients
 

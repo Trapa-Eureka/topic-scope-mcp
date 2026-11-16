@@ -9,6 +9,7 @@ Until 1.0.0 the names of tools, arguments, result fields and settings may still 
 ### Changed
 
 - Documentation only: HTTP mode has now been tried with Claude Code 2.1.325 as the client (connected, seven tools, three tool calls answered; refused with a wrong token). The usage guide shows the configuration. The 0.1.0 notes below still say it had not been tried, which was true when 0.1.0 was released.
+- Documentation only: the Docker image has now been tried as an MCP server started by Claude Code 2.1.325 over stdin/stdout, with the configuration from the usage guide. The guide also says how to keep such a container's audit log.
 
 ## [0.1.0] - 2026-11-16
 
