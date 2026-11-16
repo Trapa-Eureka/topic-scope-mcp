@@ -447,7 +447,17 @@ It is a safety net, not a complete defense. It matches command text and the text
 
 ## Known limitations
 
-- **Only Apache Kafka 4.3 and Mosquitto 2.0 have been tried**, in Docker, on macOS. Other brokers, other versions and Windows have not.
+- **It has been tried on these brokers and no others**, each in Docker, on macOS, with the same demo data (`OtherBrokersIT`):
+
+  | Broker | Result |
+  |---|---|
+  | Apache Kafka 4.3, Mosquitto 2.0 | What every other test and the local stack use. |
+  | Apache Kafka 3.9 and 4.4 | The same answers. |
+  | Redpanda 26.2 | The same answers. It cannot say when the newest message of a partition was written, so the server reads the last record of each partition for its time: one small read per partition, and on a cluster with very many partitions some times can stay empty. |
+  | EMQX 6.3 | Works. Out of the box it refuses a subscription to `#` and to `$SYS/#`, so ask with a narrower filter such as `demo/#`; the tools say so when they are refused. No version and no broker counters. |
+  | HiveMQ Community Edition 2026.5 | Works. It publishes nothing about itself: no version and no broker counters. |
+
+  One version of each, one node, no login. Managed services, clusters of several nodes of these brokers, and Windows have not been tried.
 - **Encrypted connections have been tried in one combination each**: Kafka over TLS with SCRAM-SHA-512, Mosquitto over `ssl://`, both with a PKCS12 trust store and a certificate made for the test. SCRAM-SHA-256, JKS trust stores, Kerberos and OAuth have not been tried. Client certificates are not supported for MQTT and untried for Kafka.
 - **Only Claude Code has been tried as an MCP client**: over stdin/stdout from the jar and from the Docker image, and over HTTP (how, and with which version, is in the [usage guide](docs/usage.md)). Claude Desktop and other clients have not.
 - **HTTP mode has one shared token and no encryption.** It is not user authentication. Use it on one machine or behind a reverse proxy that does TLS.

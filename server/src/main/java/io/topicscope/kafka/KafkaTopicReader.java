@@ -27,10 +27,13 @@ import org.springframework.stereotype.Component;
 
 /**
  * Reads what a Kafka cluster knows about its topics: the catalog, the partitions, the offsets and the
- * settings. Admin API only, and only its list and describe calls; no record is read here.
+ * settings. Admin API, and only its list and describe calls. One exception: on a broker that cannot say when
+ * the newest record of a partition was written, the last record is read for its time, and only its time is used.
  */
 @Component
 public class KafkaTopicReader {
+
+  private final KafkaRecordReader records = new KafkaRecordReader();
 
   /** Used where an offset or a time is not known, for example for a partition without a leader. */
   public static final long UNKNOWN = -1;
@@ -129,20 +132,30 @@ public class KafkaTopicReader {
       ListOffsetsResult end = admin.listOffsets(spec(withLeader, OffsetSpec.latest()));
       ListOffsetsResult newest = admin.listOffsets(spec(withLeader, OffsetSpec.maxTimestamp()));
 
+      Map<TopicPartition, long[]> answers = new HashMap<>();
+      Map<KafkaGroupReader.Partition, Long> lastRecords = new HashMap<>();
+      for (TopicPartition tp : withLeader) {
+        long[] a = {offset(start, tp, timeout), offset(end, tp, timeout), timestamp(newest, tp, timeout)};
+        answers.put(tp, a);
+        // A broker that does not answer the newest-by-time question (Redpanda does not) still has a last record.
+        if (a[2] < 0 && a[0] >= 0 && a[1] > a[0]) lastRecords.put(new KafkaGroupReader.Partition(tp.topic(), tp.partition()), a[1] - 1);
+      }
+      // Its time is the time of the newest record unless a producer sent an older time later, which is rare.
+      try {
+        records.timestampsAt(source, lastRecords, timeout)
+            .forEach((p, time) -> answers.get(new TopicPartition(p.topic(), p.partition()))[2] = time);
+      } catch (RuntimeException e) {
+        // The times stay unknown; everything else about the topics is still worth returning.
+      }
+
       List<TopicInfo> out = new ArrayList<>();
       for (TopicDescription d : described.values()) {
         List<PartitionInfo> partitions = new ArrayList<>();
         for (TopicPartitionInfo p : d.partitions()) {
           TopicPartition tp = new TopicPartition(d.name(), p.partition());
           boolean hasLeader = withLeader.contains(tp);
-          partitions.add(new PartitionInfo(
-              p.partition(),
-              hasLeader ? p.leader().id() : -1,
-              ids(p.replicas()),
-              ids(p.isr()),
-              hasLeader ? offset(start, tp, timeout) : UNKNOWN,
-              hasLeader ? offset(end, tp, timeout) : UNKNOWN,
-              hasLeader ? timestamp(newest, tp, timeout) : UNKNOWN));
+          long[] a = hasLeader ? answers.get(tp) : new long[] {UNKNOWN, UNKNOWN, UNKNOWN};
+          partitions.add(new PartitionInfo(p.partition(), hasLeader ? p.leader().id() : -1, ids(p.replicas()), ids(p.isr()), a[0], a[1], a[2]));
         }
         partitions.sort(Comparator.comparingInt(PartitionInfo::partition));
         out.add(new TopicInfo(d.name(), internal.getOrDefault(d.name(), d.isInternal()), List.copyOf(partitions)));

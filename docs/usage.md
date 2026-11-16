@@ -244,6 +244,12 @@ A file that defines `sources` replaces the built-in two. The full reference is i
 
 Tried against real brokers (the test `TlsStackIT`, with a certificate made for the test): Kafka over TLS with a SCRAM-SHA-512 login and a PKCS12 trust store, and Mosquitto over `ssl://` with a user name, a password and a PKCS12 trust store; also SASL/PLAIN without TLS on Kafka and plain `tcp://` on Mosquitto. Not tried: SCRAM-SHA-256, JKS trust stores, client certificates, Kerberos and OAuth logins.
 
+Other brokers that have been tried (the test `OtherBrokersIT`, one version of each): Apache Kafka 3.9 and 4.4, Redpanda 26.2, EMQX 6.3 and HiveMQ Community Edition 2026.5. Three things differ from Kafka 4.3 and Mosquitto:
+
+- **Redpanda** cannot say when the newest message of a partition was written. The server reads the last record of each partition for its time instead, so `list_topics` and `topic_freshness` take one small read per partition there.
+- **EMQX** refuses a subscription to `#` and to `$SYS/#` unless its access rules are changed. `list_topics` without a `filter` therefore reports a refusal: give a filter such as `demo/#`.
+- **EMQX and HiveMQ** publish no Mosquitto-style `$SYS` topics, so `list_sources` shows no version for them and `topic_freshness` has no broker counters.
+
 ## The audit log
 
 Every tool call, and every topic opened on the board, is one line in `~/.topic-scope/audit.jsonl` (`/data/audit.jsonl` in the image; mount a volume there to keep it):
@@ -268,6 +274,7 @@ It holds what was asked, never what was answered. While it is on, a call that ca
 | The board answers 404 | The page was not built (`cd board && npm ci && npm run build`), or the jar was not started from the repository folder. |
 | The board stays on "Waiting for the first picture" | The WebSocket is refused: the page must be opened under `127.0.0.1` or `localhost` with the board's own port. |
 | A consumer shows `STALLED` although it works | It commits less often than the sample. Use a longer `sampleSeconds`. |
+| `refused the subscription to '#'` | The MQTT broker does not let this account listen to that filter. EMQX refuses `#` and `$SYS/#` unless its access rules are changed. Ask with a narrower filter, such as `demo/#`. |
 | An MQTT topic is missing | It published nothing while the tool listened and has no retained message. Use a longer `windowSeconds`, or name it exactly. |
 
 Logs go to the server's standard error, never to standard output, which carries the MCP protocol.

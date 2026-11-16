@@ -244,6 +244,12 @@ topic-scope:
 
 실제 브로커로 확인한 것(테스트 `TlsStackIT`, 테스트용으로 만든 인증서 사용): TLS 위에서 SCRAM-SHA-512로 로그인하고 PKCS12 신뢰 저장소를 쓰는 Kafka, 그리고 사용자명·비밀번호와 PKCS12 신뢰 저장소를 쓰는 `ssl://` Mosquitto. TLS 없는 Kafka의 SASL/PLAIN과 Mosquitto의 `tcp://`도 확인했습니다. 확인하지 않은 것: SCRAM-SHA-256, JKS 신뢰 저장소, 클라이언트 인증서, Kerberos와 OAuth 로그인.
 
+확인한 다른 브로커(테스트 `OtherBrokersIT`, 각각 한 버전): Apache Kafka 3.9와 4.4, Redpanda 26.2, EMQX 6.3, HiveMQ Community Edition 2026.5. Kafka 4.3과 Mosquitto에서와 다른 점은 세 가지입니다.
+
+- **Redpanda**는 파티션의 최신 메시지가 언제 기록됐는지 알려 주지 못합니다. 서버는 대신 파티션마다 마지막 레코드를 읽어 그 시각을 씁니다. 그래서 `list_topics`와 `topic_freshness`가 파티션마다 작은 읽기를 한 번씩 합니다.
+- **EMQX**는 접근 규칙을 바꾸지 않으면 `#`와 `$SYS/#` 구독을 거부합니다. 그래서 `filter` 없는 `list_topics`는 거부됐다고 알려 줍니다. `demo/#` 같은 필터를 주십시오.
+- **EMQX와 HiveMQ**는 Mosquitto 방식의 `$SYS` 토픽을 발행하지 않습니다. 그래서 `list_sources`에 버전이 나오지 않고 `topic_freshness`에 브로커 카운터가 없습니다.
+
 ## 감사 로그
 
 도구 호출과 상태판에서 연 토픽은 모두 `~/.topic-scope/audit.jsonl`에 한 줄씩 남습니다(이미지에서는 `/data/audit.jsonl`. 보존하려면 그곳에 볼륨을 마운트합니다).
@@ -268,6 +274,7 @@ topic-scope:
 | 상태판이 404로 응답한다 | 화면을 빌드하지 않았거나(`cd board && npm ci && npm run build`), jar를 저장소 폴더에서 시작하지 않았습니다. |
 | 상태판이 "Waiting for the first picture"에서 멈춘다 | WebSocket이 거부되고 있습니다. 페이지를 `127.0.0.1`이나 `localhost`와 상태판 자신의 포트로 열어야 합니다. |
 | 동작 중인 컨슈머가 `STALLED`로 나온다 | 샘플보다 드물게 커밋합니다. `sampleSeconds`를 늘립니다. |
+| `refused the subscription to '#'` | MQTT 브로커가 이 계정에 그 필터의 구독을 허용하지 않습니다. EMQX는 접근 규칙을 바꾸지 않으면 `#`와 `$SYS/#`를 거부합니다. `demo/#`처럼 더 좁은 필터로 묻습니다. |
 | MQTT 토픽이 안 보인다 | 도구가 듣는 동안 발행이 없었고 retained 메시지도 없습니다. `windowSeconds`를 늘리거나 정확한 이름으로 묻습니다. |
 
 로그는 서버의 표준 오류로 나갑니다. 표준 출력은 MCP 프로토콜이 쓰므로 로그가 나가지 않습니다.

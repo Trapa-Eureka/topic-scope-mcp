@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.eclipse.paho.client.mqttv3.IMqttMessageListener;
 import org.eclipse.paho.client.mqttv3.MqttClient;
+import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttTopic;
 import org.springframework.stereotype.Component;
 
@@ -29,7 +30,15 @@ public class MqttObserver {
   public record Seen(String topic, byte[] payload, int qos, boolean retained, long receivedAtMillis) {}
 
   /** When the listening started and ended, epoch milliseconds. */
-  public record Window(long startedAtMillis, long endedAtMillis) {
+  /**
+   * @param refusedFilters filters the broker did not accept a subscription for; nothing was heard on them
+   */
+  public record Window(long startedAtMillis, long endedAtMillis, List<String> refusedFilters) {
+
+    public Window(long startedAtMillis, long endedAtMillis) {
+      this(startedAtMillis, endedAtMillis, List.of());
+    }
+
     public double seconds() {
       return Math.round((endedAtMillis - startedAtMillis) / 100.0) / 10.0;
     }
@@ -45,7 +54,8 @@ public class MqttObserver {
    *
    * @param filters MQTT topic filters; {@code +} stands for one level, {@code #} for all remaining levels
    * @throws IllegalArgumentException when a filter is not a valid MQTT topic filter
-   * @throws Exception when the broker does not accept the connection or the subscription
+   * @return the window, with the filters the broker refused. When it refused all of them the call returns at once
+   * @throws Exception when the broker does not accept the connection
    */
   public Window observe(Source source, List<String> filters, Duration window, Duration timeout, Sink sink) throws Exception {
     for (String filter : filters) MqttTopic.validate(filter, true);
@@ -72,15 +82,37 @@ public class MqttObserver {
         listeners[i] = listener;
       }
       long started = System.currentTimeMillis();
-      client.subscribe(topics, qos, listeners);
-      Thread.sleep(window.toMillis());
+      List<String> refused = subscribe(client, topics, qos, listeners);
+      if (refused.size() < topics.length) Thread.sleep(window.toMillis());
       synchronized (oneAtATime) {
         listening.set(false);
       }
-      return new Window(started, System.currentTimeMillis());
+      return new Window(started, System.currentTimeMillis(), refused);
     } finally {
       listening.set(false);
       MqttClients.close(client);
     }
+  }
+
+  /** What a broker answers instead of a quality of service when it refuses a subscription. */
+  private static final int REFUSED = 0x80;
+
+  /**
+   * Subscribes and returns the filters the broker refused, which a broker does when the account may not listen
+   * to them. The client library reports that in two ways: it throws when the only filter was refused, and it
+   * stays silent, with the answer in the array, when one of several was.
+   */
+  private static List<String> subscribe(MqttClient client, String[] topics, int[] qos, IMqttMessageListener[] listeners) throws MqttException {
+    try {
+      client.subscribe(topics, qos, listeners);
+    } catch (MqttException e) {
+      if (e.getReasonCode() != MqttException.REASON_CODE_SUBSCRIBE_FAILED) throw e;
+      return List.of(topics);
+    }
+    List<String> refused = new java.util.ArrayList<>();
+    for (int i = 0; i < topics.length; i++) {
+      if (qos[i] == REFUSED) refused.add(topics[i]);
+    }
+    return List.copyOf(refused);
   }
 }

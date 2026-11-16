@@ -10,8 +10,15 @@ Until 1.0.0 the names of tools, arguments, result fields and settings may still 
 
 - An MQTT source can name its own trust store under `properties` (`ssl.truststore.location`, `ssl.truststore.password`, `ssl.truststore.type`), for an `ssl://` broker whose certificate Java does not trust by itself. Until now that needed a trust store for the whole Java process. Those three are the only properties an MQTT source takes; another one, or a trust store that cannot be read, stops the server at start-up.
 
+### Fixed
+
+- Redpanda: every topic showed no newest message time, and `topic_freshness` therefore called every topic silent. Redpanda does not answer the question the server asked for that time. Where a broker does not, the server now reads the last record of each partition for its time.
+- MQTT: a subscription the broker refuses is now reported as one, naming the filter. Until now the answer was an error without a reason (`MqttException`), or, where a tool also asked for the broker's counters, an answer that looked as if nothing had been published. Found on EMQX, which refuses `#` and `$SYS/#` out of the box.
+- MQTT: `list_sources` showed a broker as unreachable when it accepted the connection and only refused the topic its version is read from.
+
 ### Documentation
 
+- Other brokers have now been tried with the demo data, in a test (`OtherBrokersIT`): Apache Kafka 3.9 and 4.4, Redpanda 26.2, EMQX 6.3 and HiveMQ Community Edition 2026.5. What differs on each is in the README under Known limitations and in the usage guide.
 - Encrypted connections have now been tried against real brokers, in a test that makes its own certificate (`TlsStackIT`): Kafka over TLS with a SCRAM-SHA-512 login, and Mosquitto over `ssl://`. Both worked as the 0.1.0 documentation described. Without the trust store the certificate is not trusted and nothing is read; a wrong SCRAM password is refused with the reason.
 
 ## [0.1.1] - 2026-11-17

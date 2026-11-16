@@ -20,7 +20,7 @@ The first two are enforced by `.claude/hooks/block-dangerous.mjs`. If it blocks 
 
 ## Commands
 
-- `./mvnw verify` — unit tests and integration tests (`*IT` start their own brokers; Docker must run; about five minutes). `-DskipITs` for unit tests only, `-DskipTests install` to only build the jar. There is no system Maven; always use the wrapper
+- `./mvnw verify` — unit tests and integration tests (`*IT` start their own brokers; Docker must run; about seven minutes, and the first run downloads the images of five other brokers). `-DskipITs` for unit tests only, `-DskipTests install` to only build the jar. There is no system Maven; always use the wrapper
 - `node --test .claude/hooks/block-dangerous.test.mjs` — after any change to the hook
 - `docker compose up -d --build --wait` — the local stack. Its brokers ask for a login; the demo accounts are in `compose.yaml`
 

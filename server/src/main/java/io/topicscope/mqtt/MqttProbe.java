@@ -24,7 +24,7 @@ public class MqttProbe {
   /** How long to wait for the version after connecting. It is retained, so it arrives at once or not at all. */
   private static final Duration VERSION_WAIT = Duration.ofMillis(300);
 
-  /** @param version the broker's own version string, or null when it does not announce one */
+  /** @param version the broker's own version string, or null when it does not announce one or does not let this account read it */
   public record BrokerInfo(String version) {}
 
   /**
@@ -35,7 +35,13 @@ public class MqttProbe {
     try {
       client.connect(MqttClients.options(source, timeout));
       CompletableFuture<String> version = new CompletableFuture<>();
-      client.subscribe(VERSION_TOPIC, 0, (topic, message) -> version.complete(new String(message.getPayload(), StandardCharsets.UTF_8)));
+      try {
+        client.subscribe(VERSION_TOPIC, 0, (topic, message) -> version.complete(new String(message.getPayload(), StandardCharsets.UTF_8)));
+      } catch (MqttException e) {
+        // The broker took the connection and refuses this one topic to the account (EMQX does by default). It is reachable.
+        if (e.getReasonCode() != MqttException.REASON_CODE_SUBSCRIBE_FAILED) throw e;
+        return new BrokerInfo(null);
+      }
       return new BrokerInfo(await(version));
     } finally {
       MqttClients.close(client);

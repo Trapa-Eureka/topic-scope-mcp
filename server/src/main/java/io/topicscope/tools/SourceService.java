@@ -105,7 +105,7 @@ public class SourceService {
         }
         case MQTT -> {
           MqttProbe.BrokerInfo b = mqttProbe.connect(source, properties.probeTimeout());
-          yield b.version() == null ? "connected (the broker does not announce a version)" : b.version();
+          yield b.version() == null ? "connected (the broker does not announce a version, or not to this account)" : b.version();
         }
       };
       return new SourceStatus(source.name(), source.type().name(), withoutPassword(source.address()), true, detail, millisSince(start));

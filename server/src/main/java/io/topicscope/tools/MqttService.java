@@ -137,6 +137,12 @@ public class MqttService {
       }
     });
 
+    if (window.refusedFilters().contains(filter)) {
+      // Not an empty answer: nothing was listened to, and saying "no messages" would be wrong.
+      throw new ToolProblem("The broker of source '" + source.name() + "' refused the subscription to '" + filter + "', so nothing was listened to.",
+          "The account of this source may not listen to that filter. Some brokers refuse '#' and '$SYS/#' unless their access rules say otherwise "
+              + "(EMQX does by default): ask for a narrower filter, such as 'demo/#', or change the broker's access rules.");
+    }
     List<TopicActivity> topics = tallies.values().stream().map(Tally::activity).toList();
     List<BrokerCounter> brokerCounters = counters.entrySet().stream().map(e -> new BrokerCounter(e.getKey(), e.getValue())).toList();
     return new Heard(window, topics, List.copyOf(newest), total[0], brokerCounters, hidden[0]);
