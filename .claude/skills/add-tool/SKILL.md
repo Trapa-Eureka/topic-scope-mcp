@@ -39,6 +39,8 @@ public SomeRecord name(@McpToolParam(description = "...", required = true) Strin
 - Kafka clients come from `KafkaClients` only. Its consumer has no group, auto-commit off and topic auto-creation off; do not build one anywhere else, and do not add `group.id`.
 - Reading a live topic must end: take the end offsets once and stop there (`KafkaRecordReader.tail`), judge "finished" by `position`, not by the last record seen, and keep only what is needed in memory.
 - A pattern that scans payload text must be linear. A name-like run with `*` that is retried from each character took seconds on 20 kB; `PayloadFormatterTest.aLargePayloadIsFormattedQuickly` guards it.
+- Anything judged from movement needs two looks on one connection (`KafkaGroupReader.sampleTwice`) and a rule that is a pure function with its own tests (`LagStatus.judge`). Say in the answer how long the sample really was.
+- A test that needs things to move gets brokers of its own with `LiveTraffic` (see `KafkaLagIT`); the shared brokers stay frozen.
 - Cap every list (see `TopicService.MAX_TOPICS`) and say in a `note` field when something was cut or is worth knowing. The note is `""` when there is nothing to say.
 
 ## Things that only break in the packaged jar

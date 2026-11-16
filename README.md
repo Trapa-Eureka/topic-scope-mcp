@@ -2,8 +2,8 @@
 
 A **read-only** MCP server that lets an AI assistant look inside Kafka and MQTT brokers: which topics exist, what the latest messages are, and whether consumers are keeping up.
 
-> **Status: Phases 0 to 4 of 9 done. Two of the three views work for Kafka: the topic list and recent messages.**
-> What exists: an MCP server with four tools (`list_sources`, `list_topics`, `describe_topic`, `recent_messages`), a build that fails if server code could change a broker, and a [local stack](#local-stack-and-demo-data) of Kafka and Mosquitto with demo data known in advance. Lag and MQTT come in Phases 5 and 6. Every feature below is marked **Planned** until it has a test that proves it.
+> **Status: Phases 0 to 5 of 9 done. All three views work for Kafka: topic list, recent messages, lag.**
+> What exists: an MCP server with six tools (`list_sources`, `list_topics`, `describe_topic`, `recent_messages`, `list_consumer_groups`, `consumer_lag`), a build that fails if server code could change a broker, and a [local stack](#local-stack-and-demo-data) of Kafka and Mosquitto with demo data known in advance. MQTT comes in Phase 6. Every feature below is marked **Planned** until it has a test that proves it.
 
 **Jump to:** [What it shows](#what-it-shows) · [Tools](#tools) · [Safety](#safety) · [Roadmap](#roadmap) · [Installation](#installation)
 
@@ -65,27 +65,35 @@ Records that arrive after the call started are not included; a busy topic would 
 | | Kafka | MQTT |
 |---|---|---|
 | Definition | **Consumer lag** = newest offset in a partition − offset the consumer group has committed. In messages | No offsets exist, so two substitutes: **freshness** = seconds since the last message on a topic; **delivery delay** = receive time − timestamp inside the payload (only when the payload has one) |
-| Columns | group, state, topic, partition, committed offset, end offset, lag, members; total per group | topic, last seen, expected interval, freshness, status |
-| Status | `OK` / `LAGGING` / `STALLED` (lag grows and the committed offset does not move between two samples) / `NO_CONSUMER` | `FRESH` / `STALE` (silent for longer than the expected interval) / `SILENT` (nothing in the window) |
-| Also shown | estimated time lag: age of the oldest unread message | broker counters from `$SYS` (queued, dropped) when the broker publishes them |
+| Columns | per group: state, members, lag, lag change, status, a one-sentence summary. Per topic: lag, lag change, messages read and messages arrived during the sample, status. Per partition: committed offset, end offset, lag | topic, last seen, expected interval, freshness, status |
+| Status | `OK` / `LAGGING` / `STALLED` / `NO_CONSUMER`, see below | `FRESH` / `STALE` (silent for longer than the expected interval) / `SILENT` (nothing in the window) |
+| Also shown | time lag: age of the oldest message the group has not read yet | broker counters from `$SYS` (queued, dropped) when the broker publishes them |
+
+One look cannot tell a slow consumer from a stopped one: both show a lag. So `consumer_lag` **looks twice**, a few seconds apart (`sampleSeconds`, default 5, 1 to 30), and judges each topic of the group by what moved in between:
+
+| Status | Rule, in this order | Meaning |
+|---|---|---|
+| `OK` | nothing is waiting; or the committed offsets moved and what is waiting is no more than what the group read during the sample | caught up, or keeping pace |
+| `LAGGING` | the committed offsets moved, and more is waiting than the group read during the sample | reading, but behind. The lag change tells whether it is falling further behind or catching up |
+| `STALLED` | messages are waiting and the committed offsets did not move | not reading |
+| `NO_CONSUMER` | messages are waiting, the group has no members, and nothing new arrived | a backlog nobody is working on |
+
+A group gets the status that most needs attention among its topics. The judgement is per topic and not per partition on purpose: a slow consumer drains one partition at a time, so single partitions stand still while the group as a whole is moving.
+
+Limits of the judgement: it is only as good as the sample. A consumer that commits less often than the sample is long looks `STALLED`; use a longer sample for those.
 
 ### Example
 
-```
-You:    Is the tracker keeping up with the surveillance feed?
+What `consumer_lag` answered for the four consumer groups of the [local stack](#local-stack-and-demo-data), which had been running with live traffic for about 45 minutes. Copied from a real run; an assistant turns this into a table or a sentence.
 
-Claude: (calls consumer_lag, source "local-kafka", group "tracker")
+| Group | Status | Lag | Lag change | Read / arrived in 5.1 s | Oldest unread | Summary |
+|---|---|---|---|---|---|---|
+| `demo-archiver` | `OK` | 0 | 0 | 10 / 10 | – | Caught up: nothing is waiting. |
+| `demo-tracker` | `LAGGING` | 2723 | +5 | 5 / 10 | 1736 s | Reading, but behind: 2723 waiting. The group read 5 while 10 arrived during the 5.1 s sample, so the lag grew by 5. |
+| `demo-reporter` | `STALLED` | 5426 | +10 | 0 / 10 | 2594 s | Not reading: 5426 waiting, and the committed offsets did not move during the 5.1 s sample; the group has no members, while 10 more arrived. |
+| `demo-alarm-notifier` | `NO_CONSUMER` | 5 | 0 | 0 / 0 | 2593 s | Nobody is reading: 5 waiting, the group has no members, and nothing new arrived during the 5.1 s sample. |
 
-        group: tracker   state: STABLE   members: 1   total lag: 1 842   status: LAGGING
-        topic               partition  committed    end      lag   oldest unread
-        surveillance.adsb       0        48 210    48 990    780      41 s
-        surveillance.adsb       1        47 655    48 717  1 062      57 s
-
-        The tracker is about one minute behind on partition 1, and the lag grew
-        between the two samples. Partition 0 is behind by 41 seconds.
-```
-
-The numbers above are an illustration of the layout, not output from a real run.
+Kafka's own `kafka-consumer-groups.sh --describe`, run a few seconds later, showed lags of 0, 2733, 5446 and 5.
 
 ## Tools
 
@@ -95,8 +103,8 @@ The numbers above are an illustration of the layout, not output from a real run.
 | `list_topics` | [topic list](#1-topic-list) for one source, with a name filter (`nameContains`) and internal topics on request (`includeInternal`). At most 200 rows, sorted by name | Done for Kafka; MQTT in Phase 6 |
 | `describe_topic` | one Kafka topic in detail: per partition the leader, replicas, in-sync replicas, start and end offset, messages and time of the newest message; plus the settings that decide how long messages live, and every setting overridden on the topic | Done |
 | `recent_messages` | [recent messages](#2-recent-messages) of one topic, with `limit` and an optional `partition` | Done for Kafka; MQTT in Phase 6 |
-| `list_consumer_groups` | Kafka consumer groups with state and member count | Planned |
-| `consumer_lag` | [lag](#3-lag) of one Kafka consumer group, sampled twice | Planned |
+| `list_consumer_groups` | Kafka consumer groups with state (`STABLE`, `EMPTY`, ...) and member count, with a name filter | Done |
+| `consumer_lag` | [lag](#3-lag) of one Kafka consumer group, sampled twice, for all its topics or one (`topic`). Takes at least `sampleSeconds` to answer | Done |
 | `topic_freshness` | [freshness](#3-lag) of Kafka or MQTT topics against an expected interval | Planned |
 
 There is no tool that writes. Every tool is announced to the client as read-only (`readOnlyHint`), and a test checks that for all of them. See [Safety](#safety).
@@ -238,7 +246,7 @@ MQTT holds four retained messages, one per sensor: `demo/sensors/<site>/<name>/s
 
 ### With live traffic (behaviour, not exact numbers)
 
-- A position report arrives every 0.5 s. `demo-archiver` keeps up. `demo-tracker` reads one record a second, so it **moves and still falls further behind**. `demo-reporter` never reads again, so its **lag grows while its committed offset stands still**.
+- A position report arrives every 0.5 s. `demo-archiver` keeps up (`OK`). `demo-tracker` reads one record a second, so it **moves and still falls further behind** (`LAGGING`). `demo-reporter` never reads again, so its **lag grows while its committed offset stands still** (`STALLED`). `demo-alarm-notifier` has a backlog of 5 on a topic where nothing happens (`NO_CONSUMER`).
 - Each sensor publishes a reading over MQTT every 2 s to `demo/sensors/<site>/<name>/telemetry`. A bridge copies every reading into `demo.sensors.telemetry` (the MQTT → Kafka path of a typical IoT pipeline).
 - The sensor `rwy-27/rvr` **falls silent after 60 s** (`SIM_SILENT_AFTER_SECONDS`). Its retained status keeps saying "online".
 - `demo.alarms`, `demo.edge-cases`, `demo.empty` and `demo.devices.state` are never written again.
@@ -293,7 +301,7 @@ Each phase ends with something that can be run and checked. A phase is done when
 - [x] **Phase 2 — MCP server skeleton.** Spring Boot 4.1 + Spring AI 2.0 MCP server over stdio, source configuration, `list_sources`, the architecture test that forbids publishing. *Check: an MCP client lists the tools and `list_sources` reports both brokers.* (Checked by `McpServerIT`: the packaged jar, started as a child process, against real brokers.)
 - [x] **Phase 3 — Kafka topic list.** `list_topics`, `describe_topic`. *Check: the result matches the topics the simulator created.* (Checked by `KafkaTopicsIT` against the seeded brokers, by `KafkaOfflinePartitionIT` on a two-broker cluster that loses a broker during the test, and by hand against the compose stack next to Kafka's own `kafka-get-offsets.sh`.)
 - [x] **Phase 4 — Kafka recent messages.** `recent_messages` with positional reads, value formatting, caps and redaction. *Check: the last N records match what was published, and no consumer group appears on the broker afterwards.* (Checked by `KafkaMessagesIT` against the seeded brokers, and by hand against the compose stack with live traffic.)
-- [ ] **Phase 5 — Kafka lag.** `list_consumer_groups`, `consumer_lag` with two samples and a status. *Check: the slow consumer is reported as `LAGGING`, a stopped one as `STALLED`.*
+- [x] **Phase 5 — Kafka lag.** `list_consumer_groups`, `consumer_lag` with two samples and a status. *Check: the slow consumer is reported as `LAGGING`, a stopped one as `STALLED`.* (Checked by `KafkaLagIT`: exact numbers on the seeded brokers, the statuses on brokers with live traffic; and by hand against the compose stack next to Kafka's own `kafka-consumer-groups.sh`.)
 - [ ] **Phase 6 — MQTT.** Observation-window topic list, retained and live messages, `topic_freshness`. *Check: a sensor that the simulator silences turns `STALE`.*
 - [ ] **Phase 7 — Safety hardening.** Allow and deny lists, audit log, timeouts, a read-only broker account in the local stack. *Check: a publish attempt with the server's account is refused by the broker itself.*
 - [ ] **Phase 8 — Web status board (optional).** A small React page that shows the three views and updates over a WebSocket. *Check: stopping the slow consumer changes the board without a reload.*

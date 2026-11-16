@@ -96,6 +96,47 @@ public class KafkaRecordReader {
     }
   }
 
+  /** Finding one timestamp per partition is quick or not worth waiting for. */
+  private static final Duration TIMESTAMP_LOOKUP = Duration.ofSeconds(3);
+
+  /**
+   * The timestamp (epoch milliseconds) of the record at each given offset, or of the first record after it
+   * when that offset is gone. Used to tell how old the oldest unread message of a consumer group is.
+   *
+   * @return only the partitions for which a record was found in time
+   */
+  public Map<KafkaGroupReader.Partition, Long> timestampsAt(String bootstrapServers, Map<KafkaGroupReader.Partition, Long> offsets, Duration timeout) {
+    if (offsets.isEmpty()) return Map.of();
+    Duration wait = timeout.compareTo(TIMESTAMP_LOOKUP) < 0 ? timeout : TIMESTAMP_LOOKUP;
+    long deadline = System.nanoTime() + wait.toNanos();
+
+    KafkaConsumer<byte[], byte[]> consumer = KafkaClients.consumer(bootstrapServers, timeout);
+    try {
+      Map<TopicPartition, KafkaGroupReader.Partition> wanted = new HashMap<>();
+      offsets.forEach((p, offset) -> wanted.put(new TopicPartition(p.topic(), p.partition()), p));
+      consumer.assign(wanted.keySet());
+      offsets.forEach((p, offset) -> consumer.seek(new TopicPartition(p.topic(), p.partition()), offset));
+
+      Map<KafkaGroupReader.Partition, Long> found = new HashMap<>();
+      while (found.size() < wanted.size() && System.nanoTime() < deadline) {
+        try {
+          for (ConsumerRecord<byte[], byte[]> record : consumer.poll(Duration.ofMillis(250))) {
+            TopicPartition tp = new TopicPartition(record.topic(), record.partition());
+            if (found.putIfAbsent(wanted.get(tp), record.timestamp()) == null) {
+              consumer.pause(List.of(tp)); // one record of this partition is all that is needed
+            }
+          }
+        } catch (InvalidOffsetException e) {
+          // The group's position was removed by retention: its oldest unread record is the oldest one left.
+          consumer.seekToBeginning(e.partitions());
+        }
+      }
+      return Map.copyOf(found);
+    } finally {
+      consumer.close(Duration.ofSeconds(1));
+    }
+  }
+
   private static RawRecord raw(ConsumerRecord<byte[], byte[]> record) {
     List<RawHeader> headers = new ArrayList<>();
     for (Header h : record.headers()) headers.add(new RawHeader(h.key(), h.value()));

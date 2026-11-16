@@ -33,12 +33,14 @@ The single source of truth is `simulator/src/main/java/io/topicscope/sim/DemoDat
 | `demo.empty` | 1 | 0 | never changes |
 | `demo.devices.state` | 1 | 8 (compacted: four sensors, each written twice) | never written again |
 
-| Consumer group | Topic | Seeded lag | Live mode |
-|---|---|---|---|
-| `demo-archiver` | positions | 0 | keeps up |
-| `demo-tracker` | positions | 120 | moves, falls further behind (reads 1 a second) |
-| `demo-reporter` | positions | 240 | committed offset stands still, lag grows |
-| `demo-alarm-notifier` | alarms | 5 | constant |
+| Consumer group | Topic | Seeded lag | Live mode | `consumer_lag` status, seeded / live |
+|---|---|---|---|---|
+| `demo-archiver` | positions | 0 | keeps up | `OK` / `OK` |
+| `demo-tracker` | positions | 120 | moves, falls further behind (reads 1 a second) | `NO_CONSUMER` / `LAGGING` |
+| `demo-reporter` | positions | 240 | committed offset stands still, lag grows | `NO_CONSUMER` / `STALLED` |
+| `demo-alarm-notifier` | alarms | 5 | constant | `NO_CONSUMER` / `NO_CONSUMER` |
+
+On a seeded stack nobody is connected and nothing arrives, so every backlog is `NO_CONSUMER`. The statuses that depend on movement need live traffic.
 
 MQTT: four retained messages `demo/sensors/<site>/<name>/status`. In live mode each sensor publishes `.../telemetry` every 2 s (not retained); `rwy-27/rvr` stops after 60 s.
 
