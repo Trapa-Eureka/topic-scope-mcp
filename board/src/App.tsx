@@ -102,9 +102,12 @@ function useStatusChanges(views: KafkaView[], time: string | undefined): Map<str
     let next: Map<string, StatusChange> | null = null;
     for (const view of views) {
       for (const g of view.groups) {
+        // MEASURING is the server saying "I do not know yet" (its first look, also after it restarted). It is not a
+        // status the group changed to or from, so it is neither recorded nor remembered.
+        if (g.status === "MEASURING") continue;
         const key = `${view.source}/${g.group}`;
         const before = last.current.get(key);
-        if (before !== undefined && before !== g.status && before !== "MEASURING") {
+        if (before !== undefined && before !== g.status) {
           next = next ?? new Map(changes);
           next.set(key, { from: before, to: g.status, at: time });
         }

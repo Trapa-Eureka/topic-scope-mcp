@@ -153,6 +153,25 @@ class BoardIT {
       assertThat(messages).hasSize(DemoData.EDGE_CASES.seededTotal());
       assertThat(messages.toString()).as("formatted and redacted like recent_messages").contains("[REDACTED]").doesNotContain("not-a-real-password");
 
+      // An MQTT topic that reports every 0.2 s here (every 2 s by default): one short listen could miss it, so the
+      // board shows what it has heard on the topic since it started. The retained status message is kept once.
+      String telemetry = DemoData.DEVICES.get(0).telemetryTopic();
+      page.send("{\"type\":\"watch\",\"source\":\"local-mqtt\",\"topic\":\"" + telemetry + "\"}");
+      Map<String, Object> heard = (Map<String, Object>) page.awaitMessage("messages heard on the watched MQTT topic", m -> m.get("watch") != null
+          && telemetry.equals(((Map<String, Object>) m.get("watch")).get("topic")) && !list(((Map<String, Object>) m.get("watch")).get("messages")).isEmpty()).get("watch");
+      assertThat(list(heard.get("messages"))).hasSizeLessThanOrEqualTo(10).allSatisfy(m -> {
+        assertThat(m).containsEntry("topic", telemetry).containsEntry("retained", false).containsEntry("valueFormat", "json");
+        assertThat((String) m.get("value")).contains("\"device\":\"twr-01/wind\"", "\"ts\":");
+      });
+      assertThat((String) heard.get("note")).contains("since it started listening");
+
+      String status = DemoData.DEVICES.get(0).statusTopic();
+      page.send("{\"type\":\"watch\",\"source\":\"local-mqtt\",\"topic\":\"" + status + "\"}");
+      Map<String, Object> retained = (Map<String, Object>) page.awaitMessage("the retained message of a status topic", m -> m.get("watch") != null
+          && status.equals(((Map<String, Object>) m.get("watch")).get("topic")) && !list(((Map<String, Object>) m.get("watch")).get("messages")).isEmpty()).get("watch");
+      assertThat(list(retained.get("messages"))).as("a retained message arrives with every look and is shown once").hasSize(1)
+          .allSatisfy(m -> assertThat(m).containsEntry("retained", true).containsEntry("value", DemoData.DEVICES.get(0).statusJson()));
+
       page.send("{\"type\":\"watch\",\"source\":\"local-kafka\",\"topic\":\"no.such.topic\"}");
       Map<String, Object> refused = (Map<String, Object>) page.awaitMessage("a problem instead of messages",
           m -> m.get("watch") != null && "no.such.topic".equals(((Map<String, Object>) m.get("watch")).get("topic"))).get("watch");

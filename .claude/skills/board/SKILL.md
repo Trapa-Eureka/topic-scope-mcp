@@ -43,6 +43,10 @@ Within two intervals the `demo-tracker` card turns from LAGGING to STALLED and s
 - Local only: `server.address` 127.0.0.1, Host check, WebSocket origin check, no framing (`BoardWebConfiguration`). Do not add a route around the filter.
 - A status must not be told by colour alone: every badge has its own shape and word (`STATUS` in `App.tsx`).
 
+## Pictures for the documents
+
+The four pictures in `docs/images/` are taken in Chrome from the board on the local stack. Capture a **region with the browser tool's zoom** (for example x 320 to 1240 of a 1568-wide view): that gives a sharp image about 1300 to 1500 pixels wide, where a plain screenshot of the window is small and has wide margins. For the stale sensor in the overview, restart the simulator and wait 80 seconds; for `board-stalled.png`, select `demo.edge-cases` and send `stop`; for `board-reconnecting.png`, stop the board container for 20 seconds.
+
 ## Checks
 
 `BoardIT` starts the jar in board mode against brokers with live traffic and reads the WebSocket: LAGGING, then STALLED after `live.holdTracker(true)` on the same connection, the silenced sensor STALE, a watched topic's messages, and the refusals for a foreign Host and a foreign Origin. What the page draws is checked by eye; there is no browser test.

@@ -138,6 +138,21 @@ public class MessageService {
     return new MessageList(source.name(), source.type().name(), topicFilter, rows, rows.size(), limit, heard.window().seconds(), String.join(" ", notes));
   }
 
+  /**
+   * Shapes MQTT messages that somebody else has already heard, newest first, into the same rows as
+   * {@code recent_messages}: formatted, capped and redacted. For the status board, which listens all the
+   * time and so can show more of a topic than one short window would.
+   */
+  public MessageList heardEarlier(Source source, String topic, List<Seen> newestFirst, String note) {
+    sources.requireAllowed(source, topic);
+    List<String> notes = new ArrayList<>();
+    notes.add(note);
+    List<MessageRow> rows = rows(newestFirst, Seen::payload, (seen, value) -> new MessageRow(seen.topic(), -1, -1,
+        Instant.ofEpochMilli(seen.receivedAtMillis()).toString(), "", List.of(), value.text(), value.format(), value.bytes(),
+        value.truncated(), value.redacted(), seen.qos(), seen.retained()), notes);
+    return new MessageList(source.name(), source.type().name(), topic, rows, rows.size(), rows.size(), 0, String.join(" ", notes));
+  }
+
   /** The partitions to read: the one asked for, or all that have a leader. */
   private static List<Integer> readablePartitions(TopicInfo info, Integer partition, List<String> notes) {
     int count = info.partitions().size();

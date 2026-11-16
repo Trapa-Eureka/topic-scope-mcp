@@ -4,7 +4,7 @@ A **read-only** MCP server that lets an AI assistant look inside Kafka and MQTT 
 
 > **Status: version 0.1.0.** Everything described here works and is tested, against Apache Kafka and Mosquitto in Docker. It is a first release by one person: read [Known limitations](#known-limitations) before pointing it at a system that matters. There is no download yet; the jar and the Docker image are built from source.
 
-**Jump to:** [Quick start](#quick-start) · [**Usage**](docs/usage.md) ([한국어](docs/usage.ko.md)) · [What it shows](#what-it-shows) · [Tools](#tools) · [Status board](#status-board) · [Safety](#safety) · [Installation](#installation)
+**Jump to:** [Quick start](#quick-start) · [**Walkthrough**](docs/walkthrough.md) ([한국어](docs/walkthrough.ko.md)) · [**Usage**](docs/usage.md) ([한국어](docs/usage.ko.md)) · [What it shows](#what-it-shows) · [Tools](#tools) · [Status board](#status-board) · [Safety](#safety) · [Installation](#installation)
 
 ## Quick start
 
@@ -26,7 +26,7 @@ Start Claude Code in this folder and approve the MCP server `topic-scope` (the r
 
 For the web status board instead: `docker compose --profile board up -d --build --wait`, then open http://127.0.0.1:8090.
 
-Everything else (other clients, HTTP, Docker, your own brokers) is in the [usage guide](docs/usage.md).
+The [walkthrough](docs/walkthrough.md) goes through all of this step by step, with the answers that came back and pictures of the board. Everything else (other clients, HTTP, Docker, your own brokers) is in the [usage guide](docs/usage.md).
 
 ## Overview
 
@@ -142,7 +142,7 @@ Kafka's own `kafka-consumer-groups.sh --describe`, run a few seconds later, show
 
 | Tool | What it returns | Status |
 |---|---|---|
-| `list_sources` | the configured brokers and whether each one answers: name, type, address, reachable, detail (what the broker says about itself, or why it could not be reached), response time | Done |
+| `list_sources` | the configured brokers and whether each one answers: name, type, address, reachable, detail (what the broker says about itself, or why it could not be reached), response time. Also the current time in UTC, because every time in every result is UTC | Done |
 | `list_topics` | [topic list](#1-topic-list) for one source, with a name filter (`nameContains`). Kafka: internal topics on request (`includeInternal`). MQTT: the filter to listen on (`filter`) and for how long (`windowSeconds`). At most 200 rows, sorted by name | Done |
 | `describe_topic` | one Kafka topic in detail: per partition the leader, replicas, in-sync replicas, start and end offset, messages and time of the newest message; plus the settings that decide how long messages live, and every setting overridden on the topic | Done |
 | `recent_messages` | [recent messages](#2-recent-messages) of one topic, with `limit`. Kafka: an optional `partition`. MQTT: `topic` may be a filter, and `windowSeconds` says how long to listen | Done |
@@ -165,16 +165,16 @@ Did you mean: demo.alarms.
 
 The same server, started in board mode, serves a local web page that shows the three views at once and keeps them current. It is for the moments when nobody is asking a question: a screen on the wall, or a second window during a test.
 
-![The status board: four consumer groups as cards with their status, the Kafka topics, and the MQTT topics with their freshness](docs/images/board-overview.jpg)
+![The status board: four consumer groups as cards with their status, the Kafka topics, and the MQTT topics with their freshness](docs/images/board-overview.png)
 
 - **Consumer lag**: one card per group with its status, how many messages are waiting, how that changed, and how many it read while how many arrived. When a status changes, the card says when and from what.
 - **Kafka topics**: partitions, messages kept, age of the newest message, replication health.
 - **MQTT topics**: freshness, when each was last heard, the delivery delay, and the broker's own counters.
-- **Recent messages**: select a topic and its newest messages appear, formatted, capped and redacted exactly as `recent_messages` does it.
+- **Recent messages**: select a topic and its newest messages appear, formatted, capped and redacted exactly as `recent_messages` does it. A Kafka topic is read on the spot; for an MQTT topic the board shows what it has heard on it since it started.
 
-The picture is pushed over a **WebSocket** every 5 seconds; the page never asks for it and is never reloaded. In the screenshot below the slow consumer `demo-tracker` had been told to stop reading seven seconds earlier: its card went from `LAGGING` to `STALLED` by itself, while the recent messages of `demo.edge-cases` stayed open.
+The picture is pushed over a **WebSocket** every 5 seconds; the page never asks for it and is never reloaded. In the screenshot below the slow consumer `demo-tracker` had been told to stop reading a few seconds earlier: its card went from `LAGGING` to `STALLED` by itself, while the recent messages of `demo.edge-cases` stayed open.
 
-![The same board after the slow consumer was stopped: its card now says STALLED and notes the time of the change; the recent messages of a topic are open, with a redacted and a truncated value](docs/images/board-stalled.jpg)
+![The same board after the slow consumer was stopped: its card now says STALLED and notes the time of the change; the recent messages of a topic are open, with a redacted and a truncated value](docs/images/board-stalled.png)
 
 Because the board looks again and again, it knows two things a single tool call cannot. It judges lag from one look to the next, without the wait of `consumer_lag`. And it **remembers MQTT topics it has heard**: a sensor that falls silent stays on the board and turns `STALE`, where `topic_freshness` behind a wildcard would no longer list it.
 
@@ -473,7 +473,7 @@ topic-scope-mcp/
 ├── mosquitto/     # Mosquitto configuration: with accounts for compose (mosquitto.conf, passwd, acl), without for most tests (open.conf)
 ├── kafka/         # a login for Kafka's own command-line tools inside the local stack
 ├── Dockerfile     # the server image, for all three modes
-├── docs/          # usage guide (English and Korean), release notes, screenshots
+├── docs/          # walkthrough and usage guide (English and Korean), release notes, screenshots
 ├── CHANGELOG.md, SECURITY.md
 ├── .claude/
 │   ├── settings.json

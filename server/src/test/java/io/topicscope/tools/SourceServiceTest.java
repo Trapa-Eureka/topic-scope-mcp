@@ -31,6 +31,8 @@ class SourceServiceTest {
 
     assertThat(result.total()).isEqualTo(2);
     assertThat(result.reachable()).isZero();
+    assertThat(java.time.Instant.parse(result.currentTimeUtc())).isBetween(java.time.Instant.now().minusSeconds(30), java.time.Instant.now().plusSeconds(1));
+    assertThat(result.note()).contains("All times", "UTC", "currentTimeUtc");
     assertThat(result.sources()).extracting(SourceService.SourceStatus::name).containsExactly("k", "m");
     assertThat(result.sources()).allSatisfy(row -> {
       assertThat(row.reachable()).isFalse();

@@ -23,7 +23,10 @@ import io.topicscope.tools.TopicService.TopicRow;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import io.topicscope.mqtt.MqttObserver.Seen;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,6 +52,9 @@ public class BoardSnapshots {
 
   static final int MAX_MQTT_TOPICS = 200;
   static final int WATCHED_MESSAGES = 10;
+
+  /** How many of the newest MQTT messages per source are kept in memory, so that a watched topic has something to show. */
+  static final int REMEMBERED_MQTT_MESSAGES = 300;
 
   /** One consumer group on the board. */
   public record GroupView(String group, String state, int members, long lag, long lagChange, String status, String summary, List<TopicLag> topics) {}
@@ -90,6 +96,8 @@ public class BoardSnapshots {
 
   private final Map<String, GroupLook> previousGroups = new HashMap<>();
   private final Map<String, Map<String, Remembered>> mqttMemory = new HashMap<>();
+  /** Per MQTT source, the newest messages heard, newest first. A broker keeps no history; this is the board's own. */
+  private final Map<String, Deque<Seen>> mqttHeard = new HashMap<>();
 
   public BoardSnapshots(TopicScopeProperties properties, BoardProperties board, Sources sources, SourceService sourceService, TopicService topics,
                         GroupService groups, KafkaGroupReader groupReader, MqttService mqtt, MessageService messages) {
@@ -150,7 +158,8 @@ public class BoardSnapshots {
 
   private MqttView mqtt(Source source) {
     try {
-      MqttService.Heard heard = mqtt.listen(source, "#", board.mqttListenSeconds(), 0, true);
+      MqttService.Heard heard = mqtt.listen(source, "#", board.mqttListenSeconds(), REMEMBERED_MQTT_MESSAGES, true);
+      remember(source.name(), heard.newest());
       long now = heard.window().endedAtMillis();
       Map<String, Remembered> memory = mqttMemory.computeIfAbsent(source.name(), k -> new TreeMap<>());
       memory.values().forEach(r -> r.lastMessages = 0);
@@ -180,10 +189,34 @@ public class BoardSnapshots {
     }
   }
 
-  /** The newest messages of one topic, for the page that asked to watch it. Formatted, capped and redacted like {@code recent_messages}. */
-  public WatchView watch(String source, String topic) {
+  /** Adds what one look heard to the memory of a source. A retained message arrives again with every look; only its latest copy is kept. */
+  private void remember(String source, List<Seen> newestFirst) {
+    Deque<Seen> memory = mqttHeard.computeIfAbsent(source, k -> new ArrayDeque<>());
+    for (int i = newestFirst.size() - 1; i >= 0; i--) {
+      Seen seen = newestFirst.get(i);
+      if (seen.retained()) memory.removeIf(old -> old.retained() && old.topic().equals(seen.topic()));
+      memory.addFirst(seen);
+    }
+    while (memory.size() > REMEMBERED_MQTT_MESSAGES) memory.removeLast();
+  }
+
+  /**
+   * The newest messages of one topic, for the page that asked to watch it. Formatted, capped and redacted like {@code recent_messages}.
+   *
+   * <p>A Kafka topic is read on the spot. An MQTT topic cannot be: listening for a moment would miss a sensor
+   * that reports every few seconds. So the board shows what it has heard on that topic since it started.
+   */
+  public synchronized WatchView watch(String source, String topic) {
     try {
-      MessageService.MessageList list = messages.recentMessages(source, topic, WATCHED_MESSAGES, null, 1);
+      Source configured = sources.require(source);
+      if (configured.type() == SourceType.MQTT) {
+        List<Seen> onTopic = mqttHeard.getOrDefault(source, new ArrayDeque<>()).stream().filter(s -> s.topic().equals(topic)).limit(WATCHED_MESSAGES).toList();
+        MessageService.MessageList heard = messages.heardEarlier(configured, topic, onTopic,
+            onTopic.isEmpty() ? "Nothing has been heard on this topic since the board started listening. An MQTT broker keeps no history."
+                : "The newest messages the board has heard on this topic since it started listening. An MQTT broker keeps no history of its own.");
+        return new WatchView(source, topic, heard.messages(), heard.note(), "");
+      }
+      MessageService.MessageList list = messages.recentMessages(source, topic, WATCHED_MESSAGES, null, null);
       return new WatchView(source, topic, list.messages(), list.note(), "");
     } catch (ToolProblem e) {
       return new WatchView(source, topic, List.of(), "", e.text());

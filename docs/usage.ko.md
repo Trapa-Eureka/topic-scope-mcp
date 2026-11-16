@@ -2,6 +2,8 @@
 
 English: [usage.md](usage.md)
 
+처음이라면 [따라 하기](walkthrough.ko.md)가 실제 응답과 화면 그림으로 전체 과정을 한 번 보여 줍니다. 이 문서는 참고 자료입니다.
+
 Topic Scope는 하나의 프로그램이고, 실행 방식이 세 가지입니다. 셋 다 같은 읽기 전용 코드, 같은 설정, 같은 감사 로그를 씁니다.
 
 | 모드 | 시작 옵션 | 이럴 때 씁니다 |
@@ -165,7 +167,7 @@ TOPIC_SCOPE_MQTT_USERNAME=topicscope TOPIC_SCOPE_MQTT_PASSWORD=topicscope-local-
 그다음 http://127.0.0.1:8090 을 엽니다.
 
 - **Consumer lag**: 그룹마다 카드 하나. 상태는 `OK`, `LAGGING`, `STALLED`, `NO CONSUMER`이고, 두 번째 조회 전까지는 `MEASURING`으로 나옵니다. 상태가 바뀌면 카드에 바뀐 시각과 이전 상태가 표시됩니다.
-- **Kafka topics**, **MQTT topics**: 토픽 이름을 누르면 최근 메시지가 열립니다. 다시 누르거나 Close를 누르면 닫힙니다.
+- **Kafka topics**, **MQTT topics**: 토픽 이름을 누르면 최근 메시지가 열립니다. 다시 누르거나 Close를 누르면 닫힙니다. Kafka 토픽은 그 자리에서 읽습니다. MQTT 토픽은 브로커에 이력이 없으므로, 상태판이 시작한 이후 그 토픽에서 들은 것을 보여 줍니다.
 - 오른쪽 위 표시는 페이지가 연결돼 있는 동안 `LIVE`입니다. 서버가 사라지면 `RECONNECTING`으로 바뀌고 페이지가 스스로 다시 연결합니다.
 
 로컬 스택에서 상태가 바뀌는 것을 보려면, 느린 컨슈머가 읽기를 멈추게 하고 카드를 지켜봅니다.
@@ -196,6 +198,7 @@ docker compose exec -T mosquitto mosquitto_pub -h localhost -u simulator -P simu
 - **`consumer_lag`는 시간이 걸립니다.** `sampleSeconds`(기본 5초) 간격으로 두 번 봅니다. 한 번만 봐서는 느린 컨슈머와 멈춘 컨슈머를 구분할 수 없기 때문입니다. 샘플 길이보다 드물게 커밋하는 컨슈머는 `STALLED`로 보이므로, 그럴 때는 샘플을 더 길게 요청합니다.
 - **MQTT의 답은 관측 결과입니다.** 브로커에는 토픽 목록도 이력도 없습니다. 도구는 몇 초간 듣고 그동안 들은 것과 retained 메시지를 알려 줍니다. 그동안 조용했고 retained 메시지도 없는 토픽은 나오지 않습니다. 그런 토픽 하나를 물으려면 정확한 이름으로 묻습니다: "demo/sensors/rwy-27/rvr/telemetry가 아직 보고하고 있어?"
 - **메시지 값은 잘리고 가려집니다.** 값은 최대 2000자까지 보이고, 비밀값처럼 보이는 것은 `[REDACTED]`로 바뀝니다. 가리기는 추측이므로, 받은 내용은 민감 정보로 다루십시오.
+- **모든 시각은 UTC입니다.** `list_sources`는 현재 UTC 시각도 함께 돌려줍니다. 이미 다음 날짜로 넘어간 시간대에 있는 어시스턴트가 올바른 시각을 "하루 어긋난 시계"로 오해하지 않게 하기 위해서입니다.
 - **이름이 틀리면 맞는 이름을 알려 줍니다.** "There is no topic named 'alarm'. Did you mean: demo.alarms."
 - **Kafka 토픽의 "messages"**는 오프셋 사이의 거리입니다. 압축 토픽에서는 상한값이고, `describe_topic`이 그렇게 알려 줍니다.
 

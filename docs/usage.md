@@ -2,6 +2,8 @@
 
 한국어: [usage.ko.md](usage.ko.md)
 
+New here? The [walkthrough](walkthrough.md) goes through everything once, step by step, with real answers and pictures. This page is the reference.
+
 Topic Scope is one program with three ways of running it. All three use the same read-only code, the same configuration and the same audit log.
 
 | Mode | Start it with | Use it when |
@@ -165,7 +167,7 @@ TOPIC_SCOPE_MQTT_USERNAME=topicscope TOPIC_SCOPE_MQTT_PASSWORD=topicscope-local-
 Then open http://127.0.0.1:8090.
 
 - **Consumer lag**: one card per group. `OK`, `LAGGING`, `STALLED`, `NO CONSUMER`; until the second look a card says `MEASURING`. When a status changes, the card notes the time and what it was before.
-- **Kafka topics** and **MQTT topics**: select a topic name to open its newest messages; select it again, or Close, to stop.
+- **Kafka topics** and **MQTT topics**: select a topic name to open its newest messages; select it again, or Close, to stop. A Kafka topic is read on the spot. For an MQTT topic the board shows what it has heard on it since it started, because a broker keeps no history.
 - The pill at the top right says `LIVE` while the page is connected. If the server goes away it says `RECONNECTING` and the page connects again by itself.
 
 To see a change happen on the local stack, make the slow consumer stop reading and watch its card:
@@ -196,6 +198,7 @@ Things worth knowing when you read an answer:
 - **`consumer_lag` takes time.** It looks twice, `sampleSeconds` apart (5 by default), because one look cannot tell a slow consumer from a stopped one. A consumer that commits less often than the sample is long looks `STALLED`; ask for a longer sample.
 - **An MQTT answer is an observation.** A broker keeps no list of topics and no history. The tools listen for a few seconds and report what they heard, plus retained messages. A topic that was silent during that time and has no retained message is not there. To ask about one such topic, name it exactly: "is demo/sensors/rwy-27/rvr/telemetry still reporting?"
 - **Message values are capped and redacted.** At most 2000 characters of a value are shown, and what looks like a secret is replaced with `[REDACTED]`. Redaction is a guess: treat what you get as sensitive.
+- **Every time is UTC.** `list_sources` also returns the current time in UTC, so an assistant in a time zone that is already on the next calendar day does not take a correct timestamp for a clock that is a day off.
 - **A wrong name is answered with the right ones.** "There is no topic named 'alarm'. Did you mean: demo.alarms."
 - **"Messages" of a Kafka topic** is the distance between its offsets. For a compacted topic that is an upper bound; `describe_topic` says so.
 

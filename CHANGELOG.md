@@ -6,6 +6,16 @@ Until 1.0.0 the names of tools, arguments, result fields and settings may still 
 
 ## [Unreleased]
 
+### Added
+
+- `list_sources` returns `currentTimeUtc` and a `note` saying that every time in every result is UTC. Found by using it: an assistant in a time zone that was already on the next calendar day read correct UTC timestamps as "the broker's clock is a day off". The server's instructions say the same.
+- A walkthrough in English and Korean (`docs/walkthrough.md`), with the answers Claude Code gave on the local stack and four pictures of the status board.
+
+### Fixed
+
+- Status board: selecting an MQTT topic showed "No messages" for a sensor that reports every two seconds, because the board listened for one second. It now shows what it has heard on the topic since it started.
+- Status board: after the server restarted, every consumer group card recorded a change "to MEASURING". That is the server not knowing yet, not a change of the group, and it is no longer recorded.
+
 ### Changed
 
 - Documentation only: HTTP mode has now been tried with Claude Code 2.1.325 as the client (connected, seven tools, three tool calls answered; refused with a wrong token). The usage guide shows the configuration. The 0.1.0 notes below still say it had not been tried, which was true when 0.1.0 was released.

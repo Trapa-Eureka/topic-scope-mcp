@@ -4,6 +4,8 @@ import io.topicscope.config.TopicScopeProperties;
 import io.topicscope.config.TopicScopeProperties.Source;
 import io.topicscope.kafka.KafkaProbe;
 import io.topicscope.mqtt.MqttProbe;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -28,8 +30,18 @@ public class SourceService {
    */
   public record SourceStatus(String name, String type, String address, boolean reachable, String detail, long responseMillis) {}
 
-  /** The result of {@code list_sources}. */
-  public record SourceList(List<SourceStatus> sources, int reachable, int total) {}
+  /**
+   * The result of {@code list_sources}.
+   *
+   * @param currentTimeUtc the server's clock right now, ISO-8601 in UTC. Every time in every tool result is UTC, so
+   *     this is what they are to be compared with. A reader in another time zone may already be on the next
+   *     calendar day, and without this an assistant takes a correct UTC timestamp for a clock that is a day off
+   * @param note how to read the times
+   */
+  public record SourceList(List<SourceStatus> sources, int reachable, int total, String currentTimeUtc, String note) {}
+
+  static final String TIME_NOTE = "All times in the results of this server are UTC. Compare them with currentTimeUtc, not with a local date: "
+      + "in a time zone ahead of UTC the local calendar day can already be the next one, and that is not a clock problem.";
 
   private final TopicScopeProperties properties;
   private final KafkaProbe kafkaProbe;
@@ -44,7 +56,7 @@ public class SourceService {
   public SourceList listSources() {
     List<SourceStatus> rows = checkAll(properties.sources());
     int reachable = (int) rows.stream().filter(SourceStatus::reachable).count();
-    return new SourceList(rows, reachable, rows.size());
+    return new SourceList(rows, reachable, rows.size(), Instant.now().truncatedTo(ChronoUnit.SECONDS).toString(), TIME_NOTE);
   }
 
   /**

@@ -16,6 +16,8 @@ spring:
           Read-only view of Kafka and MQTT brokers: topics, recent messages and lag.
           Nothing here can publish, commit offsets or change a broker.
           Start with list_sources to see which brokers are configured.
+          Every time in a result is UTC, written as ISO-8601 with a Z. Ages in seconds are already computed
+          against the current time, so use them as they are and do not compare the UTC timestamps with a local date.
         capabilities:
           resource: false
           prompt: false
