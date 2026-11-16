@@ -15,11 +15,18 @@ The first two are enforced by `.claude/hooks/block-dangerous.mjs`. If it blocks 
 
 ## Commands
 
+- `./mvnw verify` — unit tests and integration tests (`*IT` start their own brokers; Docker must run). `-DskipITs` for unit tests only. There is no system Maven; always use the wrapper
 - `node --test .claude/hooks/block-dangerous.test.mjs` — after any change to the hook
-- `./mvnw -v` — the build tool (Maven through the wrapper; there is no system Maven)
+- `docker compose up -d --build --wait` — the local stack
+
+## Layout
+
+- `simulator/` — seeds and feeds the local brokers. The only module that may publish. `DemoData.java` is the single source of the demo data; tests compare against its constants
+- `server/` — the MCP server (from Phase 2)
 
 ## Procedures
 
 Kept as skills in `.claude/skills/`, loaded only when needed:
 
 - `phase` — how a roadmap phase is started, checked and handed over
+- `local-stack` — run, reset and cross-check the local brokers; what a seeded stack holds

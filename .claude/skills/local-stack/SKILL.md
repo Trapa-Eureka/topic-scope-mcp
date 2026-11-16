@@ -1,0 +1,59 @@
+---
+name: local-stack
+description: Start, check, reset or stop the local Kafka + Mosquitto stack with its demo data, and look up the numbers a seeded stack must show. Use before running or debugging anything that talks to a broker, when a test needs known broker state, or when the user asks to bring the brokers up or down.
+---
+
+# The local stack
+
+`compose.yaml` runs Kafka (`localhost:9092`), Mosquitto (`localhost:1883`) and the simulator. Ports are on 127.0.0.1 only. Docker must be running.
+
+## Commands
+
+| I want | Command |
+|---|---|
+| brokers with sample traffic flowing | `docker compose up -d --build --wait` |
+| brokers frozen in the exact seeded state | `SIM_MODE=seed docker compose up -d --build --wait` |
+| the silent sensor to stop sooner (default 60 s) | add `SIM_SILENT_AFTER_SECONDS=15` in front |
+| to see what the simulator did | `docker compose logs simulator` |
+| an empty start | `docker compose down -v`, then up again |
+| the automated check | `./mvnw verify` (starts its own brokers with Testcontainers; the compose stack need not run) |
+
+Switching from seed to live needs no reset: the simulator sees the seed and only starts the traffic. Going back from live to the exact state does need `docker compose down -v`.
+
+## What a seeded stack holds
+
+The single source of truth is `simulator/src/main/java/io/topicscope/sim/DemoData.java`. Compare against its constants in tests; do not copy numbers into test code.
+
+| Kafka topic | Partitions | Records per partition | Live mode |
+|---|---|---|---|
+| `demo.flights.positions` | 3 | 100 | +2 records a second |
+| `demo.sensors.telemetry` | 2 | 20 | fed by the MQTT bridge |
+| `demo.alarms` | 1 | 12 | never changes |
+| `demo.edge-cases` | 1 | 6 (JSON, text without key, binary, oversized, secret-looking, tombstone) | never changes |
+| `demo.empty` | 1 | 0 | never changes |
+
+| Consumer group | Topic | Seeded lag | Live mode |
+|---|---|---|---|
+| `demo-archiver` | positions | 0 | keeps up |
+| `demo-tracker` | positions | 120 | moves, falls further behind (reads 1 a second) |
+| `demo-reporter` | positions | 240 | committed offset stands still, lag grows |
+| `demo-alarm-notifier` | alarms | 5 | constant |
+
+MQTT: four retained messages `demo/sensors/<site>/<name>/status`. In live mode each sensor publishes `.../telemetry` every 2 s (not retained); `rwy-27/rvr` stops after 60 s.
+
+## Looking with the brokers' own tools
+
+Use these to cross-check what the server reports. They run inside the containers, so they only ever reach the local stack.
+
+```bash
+docker compose exec -T kafka /opt/kafka/bin/kafka-get-offsets.sh --bootstrap-server localhost:9092 --topic-partitions 'demo.*'
+docker compose exec -T kafka /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --all-groups
+docker compose exec -T mosquitto mosquitto_sub -h localhost -t 'demo/#' -v -W 3
+```
+
+## When something is off
+
+- **"The broker is half seeded"** in the simulator log: a seed was interrupted. `docker compose down -v` and start again.
+- **Port 9092 or 1883 already in use**: another broker is running on this machine. Stop it; do not change the ports here without changing the README too.
+- **Image build fails on "Failed to validate Maven distribution SHA-256"**: the build image lost `unzip` (see the comment in `simulator/Dockerfile`).
+- Changing `DemoData.java` changes what every later test expects. Run `./mvnw verify` and update the tables here and in the README.

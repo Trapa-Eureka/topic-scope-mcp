@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>io.topicscope</groupId>
+  <artifactId>topic-scope-parent</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+  <packaging>pom</packaging>
+  <name>Topic Scope MCP</name>
+  <description>A read-only MCP server for looking inside Kafka and MQTT brokers.</description>
+
+  <modules>
+    <module>simulator</module>
+  </modules>
+
+  <properties>
+    <maven.compiler.release>21</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+
+    <!-- Same version as the apache/kafka image in compose.yaml and in the tests. -->
+    <kafka.version>4.3.2</kafka.version>
+    <paho.version>1.2.5</paho.version>
+    <slf4j.version>2.0.20</slf4j.version>
+    <junit.version>6.1.3</junit.version>
+    <assertj.version>3.27.7</assertj.version>
+    <testcontainers.version>2.0.5</testcontainers.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.junit</groupId>
+        <artifactId>junit-bom</artifactId>
+        <version>${junit.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.testcontainers</groupId>
+        <artifactId>testcontainers-bom</artifactId>
+        <version>${testcontainers.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.kafka</groupId>
+        <artifactId>kafka-clients</artifactId>
+        <version>${kafka.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.paho</groupId>
+        <artifactId>org.eclipse.paho.client.mqttv3</artifactId>
+        <version>${paho.version}</version>
+      </dependency>
+      <!-- kafka-clients brings slf4j-api 1.7, which cannot see a 2.x binding. Pin both to the same line. -->
+      <dependency>
+        <groupId>org.slf4j</groupId>
+        <artifactId>slf4j-api</artifactId>
+        <version>${slf4j.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.slf4j</groupId>
+        <artifactId>slf4j-simple</artifactId>
+        <version>${slf4j.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.assertj</groupId>
+        <artifactId>assertj-core</artifactId>
+        <version>${assertj.version}</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>3.16.0</version>
+          <configuration>
+            <compilerArgs>
+              <arg>-Xlint:all</arg>
+            </compilerArgs>
+          </configuration>
+        </plugin>
+        <!-- Unit tests: *Test. They need nothing but the JVM. -->
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-surefire-plugin</artifactId>
+          <version>3.6.1</version>
+        </plugin>
+        <!-- Integration tests: *IT. They start real brokers in Docker (Testcontainers). Skip with -DskipITs. -->
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-failsafe-plugin</artifactId>
+          <version>3.6.1</version>
+          <executions>
+            <execution>
+              <goals>
+                <goal>integration-test</goal>
+                <goal>verify</goal>
+              </goals>
+            </execution>
+          </executions>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-shade-plugin</artifactId>
+          <version>3.6.2</version>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+  </build>
+</project>

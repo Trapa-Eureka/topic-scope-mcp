@@ -1,0 +1,10 @@
+.git
+.claude
+.idea
+.vscode
+**/target
+**/node_modules
+docs
+*.md
+.env
+.env.*

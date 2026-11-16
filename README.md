@@ -2,8 +2,8 @@
 
 A **read-only** MCP server that lets an AI assistant look inside Kafka and MQTT brokers: which topics exist, what the latest messages are, and whether consumers are keeping up.
 
-> **Status: Phase 0 of 9 done. No tool works yet.**
-> The repository has its development harness (safety hook with tests, Maven wrapper, agent guidance) and this README as the agreed intent: what the server will show, how it stays safe, and the phases it is built in. Every feature below is marked **Planned** until it has a test that proves it.
+> **Status: Phases 0 and 1 of 9 done. No tool works yet.**
+> What exists: the development harness (safety hook, Maven wrapper, agent guidance) and a [local stack](#local-stack-and-demo-data) of Kafka and Mosquitto filled with demo data whose topics, messages and lag are known in advance. The MCP server itself starts in Phase 2. Every feature below is marked **Planned** until it has a test that proves it.
 
 **Jump to:** [What it shows](#what-it-shows) · [Tools](#tools) · [Safety](#safety) · [Roadmap](#roadmap) · [Installation](#installation)
 
@@ -101,7 +101,7 @@ On the broker side, give the server an account that only has read permissions (K
 ## Requirements
 
 - Java 21
-- Docker, for the local brokers and for the integration tests (from Phase 1)
+- Docker, for the local brokers and for the integration tests (developed on Docker 29)
 - An MCP client, for example Claude Code or Claude Desktop
 - Node.js 20 or newer, only to run the development hook and its tests
 
@@ -109,23 +109,64 @@ Maven is not needed. The repository ships the Maven wrapper (`./mvnw`), which do
 
 ## Installation
 
-Not available yet. From Phase 2 on, the planned steps are:
+The server is not available yet (Phase 2). What works today is the local stack:
 
 ```bash
 git clone https://github.com/Trapa-Eureka/topic-scope-mcp.git
 cd topic-scope-mcp
-./mvnw package
-docker compose up -d      # local Kafka + Mosquitto with simulated traffic
+docker compose up -d --build --wait   # Kafka on localhost:9092, Mosquitto on localhost:1883, demo data, sample traffic
 ```
 
-and then registering the built server with your MCP client. The exact commands are written here when the phase is done and has been tried.
+The first run builds the simulator image and downloads its dependencies, which takes a few minutes. Registering the server with an MCP client is written here when Phase 2 is done and has been tried.
 
 ### Develop this repository
 
 ```bash
-./mvnw -v                                            # Maven through the wrapper (there is nothing to build before Phase 2)
+./mvnw verify                                        # unit tests + integration tests (these start their own brokers in Docker)
+./mvnw verify -DskipITs                              # unit tests only, no Docker
 node --test .claude/hooks/block-dangerous.test.mjs   # tests for the development safety hook
 ```
+
+## Local stack and demo data
+
+`compose.yaml` starts one Kafka broker, one Mosquitto broker and a simulator. The simulator first **seeds** the brokers with a fixed data set, then keeps **live** sample traffic flowing. All names, aircraft and sensors are made up.
+
+```bash
+docker compose up -d --build --wait                   # seed, then live traffic
+SIM_MODE=seed docker compose up -d --build --wait     # seed only: the state below stays exact
+docker compose logs simulator                         # what the simulator did
+docker compose down -v                                # stop and forget everything
+```
+
+Every port is published on `127.0.0.1` only. Topics are never created automatically, so a typo in a topic name is an error.
+
+### After seeding (exact)
+
+| Kafka topic | Partitions | Records | What it is for |
+|---|---|---|---|
+| `demo.flights.positions` | 3 | 300 (100 each) | aircraft position reports from six aircraft |
+| `demo.sensors.telemetry` | 2 | 40 (20 each) | sensor readings |
+| `demo.alarms` | 1 | 12 | never changes; records carry headers |
+| `demo.edge-cases` | 1 | 6 | one awkward record each: JSON, text without a key, 256 binary bytes, a 20 kB value, secret-looking fields, a record without a value |
+| `demo.empty` | 1 | 0 | a topic that holds nothing |
+
+| Consumer group | Topic | Committed | Lag |
+|---|---|---|---|
+| `demo-archiver` | positions | 100 per partition | 0 |
+| `demo-tracker` | positions | 60 per partition | 120 |
+| `demo-reporter` | positions | 20 per partition | 240 |
+| `demo-alarm-notifier` | alarms | 7 | 5 |
+
+MQTT holds four retained messages, one per sensor: `demo/sensors/<site>/<name>/status`.
+
+### With live traffic (behaviour, not exact numbers)
+
+- A position report arrives every 0.5 s. `demo-archiver` keeps up. `demo-tracker` reads one record a second, so it **moves and still falls further behind**. `demo-reporter` never reads again, so its **lag grows while its committed offset stands still**.
+- Each sensor publishes a reading over MQTT every 2 s to `demo/sensors/<site>/<name>/telemetry`. A bridge copies every reading into `demo.sensors.telemetry` (the MQTT → Kafka path of a typical IoT pipeline).
+- The sensor `rwy-27/rvr` **falls silent after 60 s** (`SIM_SILENT_AFTER_SECONDS`). Its retained status keeps saying "online".
+- `demo.alarms`, `demo.edge-cases` and `demo.empty` never change.
+
+The data set is defined in one place, [`DemoData.java`](simulator/src/main/java/io/topicscope/sim/DemoData.java). The integration test [`SeededStackIT`](simulator/src/test/java/io/topicscope/sim/SeededStackIT.java) starts real brokers and checks every number above, reads records back byte for byte, and checks the live behaviour. The tests of later phases compare the server's answers against the same constants.
 
 ## Safety hook
 
@@ -139,7 +180,9 @@ This repository ships a Claude Code `PreToolUse` hook (`.claude/hooks/block-dang
 
 It is a safety net, not a complete defense. It matches command text and the text being written, so a wrapped or indirect command can slip through, an edit is judged only by its new text, and a harmless line that merely contains a forbidden name can be blocked (a shell command that only *quotes* a forbidden command is refused too). The architecture test in Phase 2 is the check that fails the build.
 
-## Project layout (planned)
+## Project layout
+
+`server/`, `board/` and `docs/` do not exist yet.
 
 ```
 topic-scope-mcp/
@@ -149,14 +192,16 @@ topic-scope-mcp/
 │       ├── mqtt/      # observation window, retained messages, freshness
 │       ├── safety/    # allow/deny lists, redaction, caps, audit log
 │       └── tools/     # the MCP tools; thin, no broker code
-├── simulator/     # publishes sample sensor and aircraft-position messages; one slow consumer that creates lag on purpose
+├── simulator/     # seeds the demo data, then publishes sample traffic; one slow consumer that creates lag on purpose. The only module that publishes
 ├── board/         # optional web status board (React, WebSocket) — Phase 8
-├── compose.yaml   # Kafka (KRaft) and Mosquitto for local use
+├── compose.yaml   # Kafka (KRaft), Mosquitto and the simulator for local use
+├── mosquitto/     # Mosquitto configuration shared by compose and the tests
 ├── docs/          # usage guide (English and Korean), screenshots
 ├── .claude/
 │   ├── settings.json
 │   ├── hooks/     # blocks dangerous commands, secrets and broker write APIs before they run
-│   └── skills/    # procedures used only sometimes; today: how one phase is worked and handed over
+│   └── skills/    # procedures used only sometimes: how one phase is worked, how the local stack is run and checked
+├── pom.xml        # Maven parent: versions and test setup for all modules
 ├── mvnw, .mvn/    # Maven wrapper
 └── CLAUDE.md      # a few lines that apply to every task
 ```
@@ -166,7 +211,7 @@ topic-scope-mcp/
 Each phase ends with something that can be run and checked. A phase is done when its check passes, not when its code is written.
 
 - [x] **Phase 0 — Harness and intent.** Git ignore rules, Maven wrapper, a short `CLAUDE.md`, a blocking hook with tests, a skill for how a phase is worked, this README as the specification. *Check: the hook tests pass.*
-- [ ] **Phase 1 — Local, deterministic brokers.** `compose.yaml` with Kafka and Mosquitto, the simulator with fixed sample data, a slow consumer that produces a known lag, Testcontainers wiring. *Check: one command brings up brokers whose topics, messages and lag are known in advance.*
+- [x] **Phase 1 — Local, deterministic brokers.** `compose.yaml` with Kafka and Mosquitto, the simulator with fixed sample data, a slow consumer that produces a known lag, Testcontainers wiring. *Check: one command brings up brokers whose topics, messages and lag are known in advance.* (Checked by `SeededStackIT`, and by hand against the compose stack with Kafka's own command-line tools.)
 - [ ] **Phase 2 — MCP server skeleton.** Spring Boot + Spring AI MCP server over stdio, source configuration, `list_sources`, the architecture test that forbids publishing. *Check: an MCP client lists the tools and `list_sources` reports both brokers.*
 - [ ] **Phase 3 — Kafka topic list.** `list_topics`, `describe_topic`. *Check: the result matches the topics the simulator created.*
 - [ ] **Phase 4 — Kafka recent messages.** `recent_messages` with positional reads, value formatting, caps and redaction. *Check: the last N records match what was published, and no consumer group appears on the broker afterwards.*
