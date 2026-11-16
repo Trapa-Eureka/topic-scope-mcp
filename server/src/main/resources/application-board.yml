@@ -1,0 +1,24 @@
+# Board mode: java -jar topic-scope-server.jar --spring.profiles.active=board
+# The same server and the same read-only code, but instead of speaking MCP over stdin/stdout it serves a
+# local web page that is fed over a WebSocket.
+
+spring:
+  main:
+    web-application-type: servlet
+  ai:
+    mcp:
+      server:
+        enabled: false
+        stdio: false
+
+server:
+  # This machine only. See BoardWebConfiguration for what else keeps other web pages out.
+  address: 127.0.0.1
+  port: ${TOPIC_SCOPE_BOARD_PORT:8090}
+
+topic-scope:
+  board:
+    enabled: true
+    interval: ${TOPIC_SCOPE_BOARD_INTERVAL:5s}
+    static-files: ${TOPIC_SCOPE_BOARD_FILES:file:board/dist/}
+    dev-origin: ${TOPIC_SCOPE_BOARD_DEV_ORIGIN:}

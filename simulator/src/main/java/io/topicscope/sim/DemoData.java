@@ -144,6 +144,12 @@ public final class DemoData {
 
   public static final int SEEDED_STEPS_PER_DEVICE = 10;
 
+  /**
+   * A switch for demonstrations: publish {@code stop} here and the slow consumer ({@link #TRACKER}) stops reading
+   * while it stays connected; publish {@code start} and it reads again. Not retained, and outside {@code demo/sensors}.
+   */
+  public static final String TRACKER_CONTROL_TOPIC = "demo/control/tracker";
+
   /** Wildcard filter that matches every telemetry topic. */
   public static final String TELEMETRY_FILTER = "demo/sensors/+/+/telemetry";
   /** Wildcard filter that matches everything the simulator publishes over MQTT. */

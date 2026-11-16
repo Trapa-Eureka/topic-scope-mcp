@@ -44,6 +44,11 @@
       <groupId>org.apache.kafka</groupId>
       <artifactId>kafka-clients</artifactId>
     </dependency>
+    <!-- Board mode only (the "board" profile): a local web page fed over a WebSocket. In MCP mode no web server starts. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-websocket</artifactId>
+    </dependency>
     <!-- Used directly to read and redact JSON message values. Spring AI brings the same version in. -->
     <dependency>
       <groupId>tools.jackson.core</groupId>

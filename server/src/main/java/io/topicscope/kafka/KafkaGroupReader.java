@@ -94,6 +94,18 @@ public class KafkaGroupReader {
     }
   }
 
+  /** Every group at one moment, on one connection. For callers that look regularly and compare one look with the next. */
+  public Map<String, Sample> sampleAll(Source source, Duration timeout) throws Exception {
+    Admin admin = KafkaClients.admin(source, timeout);
+    try {
+      Map<String, Sample> samples = new java.util.TreeMap<>();
+      for (GroupInfo group : list(admin, timeout)) samples.put(group.group(), sample(admin, group.group(), timeout));
+      return samples;
+    } finally {
+      KafkaClients.close(admin);
+    }
+  }
+
   private static List<GroupInfo> list(Admin admin, Duration timeout) throws Exception {
     Collection<GroupListing> listings = admin.listGroups(ListGroupsOptions.forConsumerGroups()).all().get(timeout.toMillis(), TimeUnit.MILLISECONDS);
     List<String> ids = listings.stream().map(GroupListing::groupId).toList();

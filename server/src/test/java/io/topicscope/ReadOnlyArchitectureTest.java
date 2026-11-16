@@ -91,7 +91,7 @@ class ReadOnlyArchitectureTest {
       })
       .because("a last will is a message the broker publishes on the server's behalf");
 
-  static final ArchRule TOOLS_HOLD_NO_BROKER_CODE = noClasses().that().resideInAPackage("..tools..")
+  static final ArchRule TOOLS_HOLD_NO_BROKER_CODE = noClasses().that().resideInAnyPackage("..tools..", "..board..")
       .should().dependOnClassesThat().resideInAnyPackage("org.apache.kafka..", "org.eclipse.paho..")
       .because("tool classes stay thin; broker access lives in the kafka and mqtt packages where these rules watch it");
 

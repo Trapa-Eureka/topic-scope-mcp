@@ -1,0 +1,24 @@
+{
+  "name": "topic-scope-board",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "The web status board of Topic Scope: a read-only page fed over a WebSocket by the server in board mode.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.3.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.8"
+  }
+}

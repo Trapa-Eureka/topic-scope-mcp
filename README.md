@@ -2,10 +2,10 @@
 
 A **read-only** MCP server that lets an AI assistant look inside Kafka and MQTT brokers: which topics exist, what the latest messages are, and whether consumers are keeping up.
 
-> **Status: Phases 0 to 7 of 9 done. All three views work for Kafka and for MQTT, and every safety rule below is in place.**
-> What exists: an MCP server with seven tools (`list_sources`, `list_topics`, `describe_topic`, `recent_messages`, `list_consumer_groups`, `consumer_lag`, `topic_freshness`); logins for brokers that ask for one; topic allow and deny lists; an audit log of every call; a build that fails if server code could change a broker; and a [local stack](#local-stack-and-demo-data) of Kafka and Mosquitto in which the server's account is kept from writing by the brokers themselves. Still to come: an optional web status board (Phase 8) and a release (Phase 9).
+> **Status: Phases 0 to 8 of 9 done. Not released yet: build it from source.**
+> What exists: an MCP server with seven tools (`list_sources`, `list_topics`, `describe_topic`, `recent_messages`, `list_consumer_groups`, `consumer_lag`, `topic_freshness`); a [web status board](#status-board) that shows the same three views live over a WebSocket; logins for brokers that ask for one; topic allow and deny lists; an audit log; a build that fails if server code could change a broker; and a [local stack](#local-stack-and-demo-data) of Kafka and Mosquitto in which the server's account is kept from writing by the brokers themselves. Still to come: a release (Phase 9).
 
-**Jump to:** [What it shows](#what-it-shows) · [Tools](#tools) · [Safety](#safety) · [Roadmap](#roadmap) · [Installation](#installation)
+**Jump to:** [What it shows](#what-it-shows) · [Tools](#tools) · [Status board](#status-board) · [Safety](#safety) · [Roadmap](#roadmap) · [Installation](#installation)
 
 ## Overview
 
@@ -21,7 +21,7 @@ It is built for safety-critical surroundings: it **cannot publish, cannot commit
 
 ## What it shows
 
-An MCP server has no screen of its own. "The screen" is the assistant's chat: you ask a question, the assistant calls a tool, and the result is shown as a table. Phase 8 adds an optional web status board that shows the same three views live.
+An MCP server has no screen of its own. "The screen" is the assistant's chat: you ask a question, the assistant calls a tool, and the result is shown as a table. The [status board](#status-board) shows the same three views live on a web page.
 
 ### 1. Topic list
 
@@ -140,6 +140,54 @@ There is no topic named 'alarm' on source 'local-kafka'.
 Did you mean: demo.alarms.
 ```
 
+## Status board
+
+The same server, started in board mode, serves a local web page that shows the three views at once and keeps them current. It is for the moments when nobody is asking a question: a screen on the wall, or a second window during a test.
+
+![The status board: four consumer groups as cards with their status, the Kafka topics, and the MQTT topics with their freshness](docs/images/board-overview.jpg)
+
+- **Consumer lag**: one card per group with its status, how many messages are waiting, how that changed, and how many it read while how many arrived. When a status changes, the card says when and from what.
+- **Kafka topics**: partitions, messages kept, age of the newest message, replication health.
+- **MQTT topics**: freshness, when each was last heard, the delivery delay, and the broker's own counters.
+- **Recent messages**: select a topic and its newest messages appear, formatted, capped and redacted exactly as `recent_messages` does it.
+
+The picture is pushed over a **WebSocket** every 5 seconds; the page never asks for it and is never reloaded. In the screenshot below the slow consumer `demo-tracker` had been told to stop reading seven seconds earlier: its card went from `LAGGING` to `STALLED` by itself, while the recent messages of `demo.edge-cases` stayed open.
+
+![The same board after the slow consumer was stopped: its card now says STALLED and notes the time of the change; the recent messages of a topic are open, with a redacted and a truncated value](docs/images/board-stalled.jpg)
+
+Because the board looks again and again, it knows two things a single tool call cannot. It judges lag from one look to the next, without the wait of `consumer_lag`. And it **remembers MQTT topics it has heard**: a sensor that falls silent stays on the board and turns `STALE`, where `topic_freshness` behind a wildcard would no longer list it.
+
+### Run it
+
+```bash
+(cd board && npm ci && npm run build)          # builds the page into board/dist (Node.js 20 or newer)
+TOPIC_SCOPE_KAFKA_USERNAME=topicscope TOPIC_SCOPE_KAFKA_PASSWORD=topicscope-local-only \
+TOPIC_SCOPE_MQTT_USERNAME=topicscope TOPIC_SCOPE_MQTT_PASSWORD=topicscope-local-only \
+  java -jar server/target/topic-scope-server-0.1.0-SNAPSHOT.jar --spring.profiles.active=board
+```
+
+Then open http://127.0.0.1:8090. Run it from the repository folder, after the two commands under [Installation](#installation). To see a status change live on the local stack:
+
+```bash
+docker compose exec -T mosquitto mosquitto_pub -h localhost -u simulator -P simulator-local-only -t demo/control/tracker -m stop    # and -m start
+```
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `TOPIC_SCOPE_BOARD_PORT` | `8090` | the port, on 127.0.0.1 |
+| `TOPIC_SCOPE_BOARD_INTERVAL` | `5s` | how often the brokers are looked at |
+| `TOPIC_SCOPE_BOARD_FILES` | `file:board/dist/` | where the built page is |
+
+The sources, logins, topic rules and the audit log are the ones from [Configuration](#configuration); board mode and MCP mode are the same program.
+
+### What the board does and does not do
+
+- It asks through the same code as the tools, so everything under [Safety](#safety) holds: it cannot write, the topic allow and deny lists apply, and message content is capped and redacted. The regular picture holds no message content at all; content goes out only for a topic someone selected, and each such selection is a line in the audit log.
+- It looks at the brokers only while a page is open.
+- **It is for one machine.** It listens on 127.0.0.1, refuses requests under a foreign host name (which stops a web page elsewhere from reaching it through your browser), accepts WebSocket connections only from its own page, and cannot be put inside another page's frame. It has **no login**: another program or user on the same machine can open it. Do not put it behind a proxy to share it.
+- Each look costs the brokers a handful of read requests, and an MQTT source is listened to for 2 of every 5 seconds. A topic that publishes less often than that is still caught, just later.
+- The page was checked by eye in Chrome; there is no automated browser test. What the server pushes is tested by `BoardIT`.
+
 ## Safety
 
 Rules that matter are enforced by a mechanism and a test, not by a sentence in a document.
@@ -178,7 +226,7 @@ The local stack sets up exactly this: see [`Seeder.lookOnlyRules`](simulator/src
 - Java 21
 - Docker, for the local brokers and for the integration tests (developed on Docker 29)
 - An MCP client, for example Claude Code or Claude Desktop
-- Node.js 20 or newer, only to run the development hook and its tests
+- Node.js 20 or newer, to build the status board's page, and to run the development hook's tests
 
 Maven is not needed. The repository ships the Maven wrapper (`./mvnw`), which downloads Maven 3.9.16 on first use and checks it against a pinned SHA-256.
 
@@ -285,6 +333,7 @@ While recording is on, a call that cannot be recorded is not answered: the tool 
 ./mvnw verify                                        # unit tests + integration tests (these start their own brokers in Docker)
 ./mvnw verify -DskipITs                              # unit tests only, no Docker
 node --test .claude/hooks/block-dangerous.test.mjs   # tests for the development safety hook
+(cd board && npm ci && npm run typecheck)            # the status board's page; npm run dev for hot reload
 ```
 
 ## Local stack and demo data
@@ -342,6 +391,7 @@ MQTT holds four retained messages, one per sensor: `demo/sensors/<site>/<name>/s
 ### With live traffic (behaviour, not exact numbers)
 
 - A position report arrives every 0.5 s. `demo-archiver` keeps up (`OK`). `demo-tracker` reads one record a second, so it **moves and still falls further behind** (`LAGGING`). `demo-reporter` never reads again, so its **lag grows while its committed offset stands still** (`STALLED`). `demo-alarm-notifier` has a backlog of 5 on a topic where nothing happens (`NO_CONSUMER`).
+- Publishing `stop` to the MQTT topic `demo/control/tracker` makes `demo-tracker` stop reading while it stays connected (it turns `STALLED`); `start` lets it read again. A switch for demonstrations.
 - Each sensor publishes a reading over MQTT every 2 s to `demo/sensors/<site>/<name>/telemetry`. A bridge copies every reading into `demo.sensors.telemetry` (the MQTT → Kafka path of a typical IoT pipeline).
 - The sensor `rwy-27/rvr` **falls silent after 60 s** (`SIM_SILENT_AFTER_SECONDS`). Its retained status keeps saying "online". `topic_freshness` reports the other three `FRESH` and this one `STALE` in a window that covers the moment it stops, `SILENT` afterwards when it is named exactly.
 - `demo.alarms`, `demo.edge-cases`, `demo.empty` and `demo.devices.state` are never written again.
@@ -362,7 +412,7 @@ It is a safety net, not a complete defense. It matches command text and the text
 
 ## Project layout
 
-`board/` and `docs/` do not exist yet.
+`docs/` holds only the screenshots so far; the usage guide comes with Phase 9.
 
 ```
 topic-scope-mcp/
@@ -371,9 +421,10 @@ topic-scope-mcp/
 │       ├── kafka/     # Admin API reads, positional record reads, lag
 │       ├── mqtt/      # observation window, retained messages, freshness
 │       ├── safety/    # allow/deny lists, redaction, caps
-│       └── tools/     # the MCP tools and the audit log; thin, no broker code
+│       ├── tools/     # the MCP tools and the audit log; thin, no broker code
+│       └── board/     # board mode: the regular picture of the brokers and the WebSocket that pushes it
 ├── simulator/     # seeds the demo data, then publishes sample traffic; one slow consumer that creates lag on purpose. The only module that publishes
-├── board/         # optional web status board (React, WebSocket) — Phase 8
+├── board/         # the status board's page (React, TypeScript, Vite); fed by the server in board mode
 ├── compose.yaml   # Kafka (KRaft), Mosquitto and the simulator for local use, with accounts
 ├── mosquitto/     # Mosquitto configuration: with accounts for compose (mosquitto.conf, passwd, acl), without for most tests (open.conf)
 ├── kafka/         # a login for Kafka's own command-line tools inside the local stack
@@ -381,7 +432,7 @@ topic-scope-mcp/
 ├── .claude/
 │   ├── settings.json
 │   ├── hooks/     # blocks dangerous commands, secrets and broker write APIs before they run
-│   └── skills/    # procedures used only sometimes: how one phase is worked, how the local stack is run and checked, how a tool is added
+│   └── skills/    # procedures used only sometimes: how one phase is worked, how the local stack is run and checked, how a tool is added, how the board is run and shown
 ├── .mcp.json      # registers the built server with Claude Code for this folder
 ├── pom.xml        # Maven parent: versions and test setup for all modules
 ├── mvnw, .mvn/    # Maven wrapper
@@ -400,7 +451,7 @@ Each phase ends with something that can be run and checked. A phase is done when
 - [x] **Phase 5 — Kafka lag.** `list_consumer_groups`, `consumer_lag` with two samples and a status. *Check: the slow consumer is reported as `LAGGING`, a stopped one as `STALLED`.* (Checked by `KafkaLagIT`: exact numbers on the seeded brokers, the statuses on brokers with live traffic; and by hand against the compose stack next to Kafka's own `kafka-consumer-groups.sh`.)
 - [x] **Phase 6 — MQTT.** Observation-window topic list, retained and live messages, `topic_freshness`. *Check: a sensor that the simulator silences turns `STALE`.* (Checked by `MqttIT`: a window that covers the moment the sensor stops reports it `STALE`; afterwards it is `SILENT` when named exactly. And by hand against the compose stack.)
 - [x] **Phase 7 — Safety hardening.** Allow and deny lists, audit log, broker logins, a read-only broker account in the local stack. *Check: a publish attempt with the server's account is refused by the broker itself.* (Checked by `SecuredStackIT` for Kafka and MQTT, by `AccessAndAuditIT` for the lists and the log, and by hand against the compose stack.)
-- [ ] **Phase 8 — Web status board (optional).** A small React page that shows the three views and updates over a WebSocket. *Check: stopping the slow consumer changes the board without a reload.*
+- [x] **Phase 8 — Web status board.** A React page that shows the three views and updates over a WebSocket, served by the server in board mode. *Check: stopping the slow consumer changes the board without a reload.* (Checked in Chrome against the compose stack, see the second screenshot above; and by `BoardIT`, which reads the WebSocket while the consumer is stopped and released.)
 - [ ] **Phase 9 — Release.** Docker image, HTTP transport, usage guide in English and Korean, screenshots, `CHANGELOG.md`, `SECURITY.md`, v0.1.0.
 
 ## Contributing

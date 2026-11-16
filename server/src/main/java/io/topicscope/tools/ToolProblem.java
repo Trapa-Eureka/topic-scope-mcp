@@ -22,6 +22,7 @@ public class ToolProblem extends RuntimeException {
     super(problem, new Hint(hint));
   }
 
+  /** What is wrong, without the hint. */
   public String problem() {
     return getMessage();
   }

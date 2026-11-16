@@ -63,6 +63,9 @@ test("blocks broker commands that reach anything but the local stack", () => {
     "mosquitto_sub -h test.mosquitto.org -t '#'",
     "mosquitto_pub -h iot.example.com -t sensors/1 -m hi",
     "mosquitto_sub -L mqtt://broker.example.com/sensors/#",
+    "echo start && mosquitto_pub -h field-broker.example.com -t x -m y && echo done",
+    "ls; /opt/kafka/bin/kafka-console-consumer.sh --topic t --bootstrap-server prod:9092",
+    "kafka-topics --bootstrap-server prod-kafka:9092 --list",
   ];
   for (const cmd of blocked) assert.equal(bash(cmd).block, true, `should be blocked: ${cmd}`);
 });
@@ -99,6 +102,12 @@ test("allows ordinary development commands", () => {
     "mosquitto_pub -h 127.0.0.1 -t sensors/1 -m hi",
     "grep -r kafka-topics docs/",
     "ssh -h",
+    // The word "mqtt" or "kafka" in a command is not a broker tool, and another command's -h or -b is not a broker address.
+    "./mvnw verify -Dit.test=MqttIT; grep -h -A14 FAILURE server/target/failsafe-reports/out.txt",
+    `echo 'snapshot.get("mqtt")' > /dev/null; grep -h pattern file.txt`,
+    "mosquitto_sub -h localhost -t '#' -W 2 | grep -h -b remote.example.com",
+    "docker compose exec -T kafka /opt/kafka/bin/kafka-acls.sh --bootstrap-server localhost:9092 --list && ssh -b 10.0.0.1 x",
+    "mosquitto_sub -L mqtt://localhost/demo/sensors/#",
   ];
   for (const cmd of allowed) assert.equal(bash(cmd).block, false, `should be allowed: ${cmd} (${bash(cmd).reason ?? ""})`);
 });

@@ -22,8 +22,15 @@ public class TopicScopeApplication {
 
   public static void main(String[] args) {
     AtomicReference<ConfigurableApplicationContext> context = new AtomicReference<>();
-    exitWhenStdinCloses(context);
+    // In board mode nobody owns this process through stdin; it runs until it is stopped.
+    if (!boardMode(args)) exitWhenStdinCloses(context);
     context.set(SpringApplication.run(TopicScopeApplication.class, args));
+  }
+
+  static boolean boardMode(String[] args) {
+    String profiles = String.join(",", args) + "," + System.getenv().getOrDefault("SPRING_PROFILES_ACTIVE", "")
+        + "," + System.getProperty("spring.profiles.active", "");
+    return java.util.Arrays.stream(profiles.split("[,=\\s]+")).anyMatch("board"::equals);
   }
 
   /**

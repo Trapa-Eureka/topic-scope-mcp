@@ -46,6 +46,7 @@ public final class LiveTraffic implements AutoCloseable {
   }
 
   private final AtomicBoolean running = new AtomicBoolean(true);
+  private final AtomicBoolean trackerHeld = new AtomicBoolean(false);
   private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2, r -> daemon(r, "sim-publisher"));
   private final List<Thread> consumerThreads = new ArrayList<>();
   private final List<KafkaConsumer<byte[], byte[]>> consumers = new ArrayList<>();
@@ -67,13 +68,18 @@ public final class LiveTraffic implements AutoCloseable {
     // The bridge subscribes before anything is published, so no reading is missed.
     mqttBridge = connect(stack, "topic-scope-simulator-bridge");
     mqttBridge.subscribe(DemoData.TELEMETRY_FILTER, 1, (topic, message) -> bridgeToKafka(topic, message.getPayload()));
+    mqttBridge.subscribe(DemoData.TRACKER_CONTROL_TOPIC, 1, (topic, message) -> {
+      String command = new String(message.getPayload(), StandardCharsets.UTF_8).trim();
+      if (command.equals("stop")) holdTracker(true);
+      if (command.equals("start")) holdTracker(false);
+    });
     mqttPublisher = connect(stack, "topic-scope-simulator-live");
 
     scheduler.scheduleAtFixedRate(this::publishPosition, 0, timing.positionInterval().toMillis(), TimeUnit.MILLISECONDS);
     scheduler.scheduleAtFixedRate(() -> publishTelemetry(timing.silentAfter()), 0, timing.telemetryInterval().toMillis(), TimeUnit.MILLISECONDS);
 
-    startConsumer(stack, DemoData.ARCHIVER, 500, Duration.ZERO);
-    startConsumer(stack, DemoData.TRACKER, 1, timing.trackerPause());
+    startConsumer(stack, DemoData.ARCHIVER, 500, Duration.ZERO, null);
+    startConsumer(stack, DemoData.TRACKER, 1, timing.trackerPause(), trackerHeld);
   }
 
   /** On brokers that ask for no login. */
@@ -127,8 +133,20 @@ public final class LiveTraffic implements AutoCloseable {
 
   // ---------- consumers ----------
 
-  /** Reads at most {@code maxRecords} per poll, commits, then waits {@code pause}. A long pause with one record makes a slow consumer. */
-  private void startConsumer(Stack stack, DemoData.GroupSpec group, int maxRecords, Duration pause) {
+  /**
+   * Makes the slow consumer stop reading, or read again. While held it stays a connected member of its group,
+   * so what an observer sees is a consumer that is there and does nothing: messages wait, the committed offsets stand still.
+   */
+  public void holdTracker(boolean held) {
+    if (trackerHeld.getAndSet(held) != held) System.out.println("[simulator] " + DemoData.TRACKER.group() + (held ? " is held: it stops reading" : " is released: it reads again"));
+  }
+
+  /**
+   * Reads at most {@code maxRecords} per poll, commits, then waits {@code pause}. A long pause with one record makes a slow consumer.
+   *
+   * @param held when not null and true, the consumer keeps polling (so it stays in its group) but fetches nothing
+   */
+  private void startConsumer(Stack stack, DemoData.GroupSpec group, int maxRecords, Duration pause, AtomicBoolean held) {
     Properties props = stack.kafka();
     props.put(ConsumerConfig.GROUP_ID_CONFIG, group.group());
     props.put(ConsumerConfig.CLIENT_ID_CONFIG, group.group() + "-1");
@@ -144,6 +162,10 @@ public final class LiveTraffic implements AutoCloseable {
       try {
         consumer.subscribe(List.of(group.topic().name()));
         while (running.get()) {
+          if (held != null) {
+            if (held.get()) consumer.pause(consumer.assignment());
+            else consumer.resume(consumer.paused());
+          }
           ConsumerRecords<byte[], byte[]> records = consumer.poll(Duration.ofMillis(500));
           if (!records.isEmpty()) consumer.commitSync();
           if (!pause.isZero() && !records.isEmpty()) Thread.sleep(pause.toMillis());

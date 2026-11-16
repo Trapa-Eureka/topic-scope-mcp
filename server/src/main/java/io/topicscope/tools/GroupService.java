@@ -131,11 +131,20 @@ public class GroupService {
       if (two.isEmpty()) {
         throw new ToolProblem("There is no consumer group named '" + groupName + "' on source '" + source.name() + "'.", otherGroups(source, groupName));
       }
-      return report(source, groupName, topicFilter, two.get());
+      return report(source, groupName, topicFilter, two.get(), true);
     });
   }
 
-  private LagReport report(Source source, String group, String topicFilter, TwoSamples two) {
+  /**
+   * The lag report from two looks the caller already has, for something that looks at regular intervals and
+   * compares each look with the one before. The age of the oldest unread message is left out (-1): finding it
+   * means reading a record per partition, which is too much to do on every tick.
+   */
+  public LagReport lagBetween(Source source, String group, KafkaGroupReader.Sample first, KafkaGroupReader.Sample second, Duration between) {
+    return report(source, group, null, new TwoSamples(first, second, between), false);
+  }
+
+  private LagReport report(Source source, String group, String topicFilter, TwoSamples two, boolean withAges) {
     GroupInfo info = two.second().group();
     var access = sources.access(source);
     Map<Partition, Offsets> first = two.first().offsets();
@@ -166,7 +175,7 @@ public class GroupService {
               + ", so there is nothing to measure its lag against.", List.of(), List.of(), String.join(" ", notes));
     }
 
-    Map<Partition, Long> ages = oldestUnreadAges(source, partitions, second, notes);
+    Map<Partition, Long> ages = withAges ? oldestUnreadAges(source, partitions, second, notes) : Map.of();
 
     List<PartitionLag> rows = new ArrayList<>();
     Map<String, long[]> perTopic = new TreeMap<>(); // lag, lagChange, consumed, arrived, partitions, oldest age

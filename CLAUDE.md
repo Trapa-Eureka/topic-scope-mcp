@@ -26,7 +26,8 @@ The first two are enforced by `.claude/hooks/block-dangerous.mjs`. If it blocks 
 ## Layout
 
 - `simulator/` — seeds and feeds the local brokers. The only module that may publish. `DemoData.java` is the single source of the demo data; tests compare against its constants
-- `server/` — the MCP server. Broker access only in `kafka/` and `mqtt/`; `tools/` stays thin; every message value, key and header passes `safety/PayloadFormatter` before it is returned. `ReadOnlyArchitectureTest` fails the build on any broker-client call outside its allow lists
+- `board/` — the status board's page (React, TypeScript). It only draws what the server in board mode pushes over a WebSocket
+- `server/` — the MCP server, and in board mode (`io.topicscope.board`) the status board's back end. Broker access only in `kafka/` and `mqtt/`; `tools/` stays thin; every message value, key and header passes `safety/PayloadFormatter` before it is returned. `ReadOnlyArchitectureTest` fails the build on any broker-client call outside its allow lists
 
 ## Procedures
 
@@ -34,4 +35,5 @@ Kept as skills in `.claude/skills/`, loaded only when needed:
 
 - `phase` — how a roadmap phase is started, checked and handed over
 - `local-stack` — run, reset and cross-check the local brokers; what a seeded stack holds
+- `board` — build, run, develop and demonstrate the status board
 - `add-tool` — where a tool's code goes, the annotations and tests every tool needs, pitfalls of the packaged jar, talking to the server by hand

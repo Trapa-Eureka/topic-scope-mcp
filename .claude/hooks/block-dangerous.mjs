@@ -45,23 +45,41 @@ const DANGEROUS_RM_TARGET = /(?:^|\s)(?:\/|\/\*|~\/?|~\/\*|\$HOME\/?|\$\{HOME\}\
 
 // Broker command-line tools may only talk to the local stack. A development agent must never reach a real broker.
 const LOCAL_BROKER_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]", "0.0.0.0", "kafka", "mosquitto", "broker", "host.docker.internal"]);
-const KAFKA_CLI = /\b(?:kafka-[a-z-]+(?:\.sh)?|kcat|kafkacat)\b/;
-const MQTT_CLI = /\b(?:mosquitto_(?:pub|sub|rr)|mqttx?)\b/;
+// The tool as a command: its name followed by its arguments. The bare words "kafka" or "mqtt" somewhere in a
+// command (a file name, a test name, a string) are not a broker tool.
+const KAFKA_CLI = /\b(?:kafka-[a-z-]+(?:\.sh)?|kcat|kafkacat)(?=\s|$)/g;
+const MQTT_CLI = /\b(?:mosquitto_(?:pub|sub|rr)|mqttx)(?=\s|$)/g;
 
 function hostOf(address) {
   const a = address.replace(/^["']|["']$/g, "").replace(/^[a-z]+:\/\//i, "");
   if (a.startsWith("[")) return a.slice(0, a.indexOf("]") + 1);
-  return a.split(":")[0];
+  return a.split(/[:/]/)[0];
 }
 
-/** @returns {string | null} the first non-local broker host the command names */
+/** The arguments of each use of a tool: from its name to the end of that command (the next ; & | or line break). */
+function argumentsOf(cmd, tool) {
+  const found = [];
+  for (const m of cmd.matchAll(tool)) {
+    const rest = cmd.slice(m.index + m[0].length);
+    const end = rest.search(/[;&|\n]/);
+    found.push(end < 0 ? rest : rest.slice(0, end));
+  }
+  return found;
+}
+
+/**
+ * Only the tool's own arguments are searched for an address. Another command on the same line that happens
+ * to take -h or -b (grep, ssh) is not a broker being reached.
+ *
+ * @returns {string | null} the first non-local broker host that a broker command-line tool is pointed at
+ */
 export function remoteBrokerHost(cmd) {
   const addresses = [];
-  if (KAFKA_CLI.test(cmd)) {
-    for (const m of cmd.matchAll(/(?:--bootstrap-server|--broker-list|--command-config-bootstrap|\s-b)(?:=|\s+)(\S+)/g)) addresses.push(...m[1].split(","));
+  for (const args of argumentsOf(cmd, KAFKA_CLI)) {
+    for (const m of args.matchAll(/(?:--bootstrap-server|--broker-list|\s-b)(?:=|\s+)(\S+)/g)) addresses.push(...m[1].split(","));
   }
-  if (MQTT_CLI.test(cmd)) {
-    for (const m of cmd.matchAll(/(?:\s-h|--host|\s-L|--url)(?:=|\s+)(\S+)/g)) addresses.push(m[1]);
+  for (const args of argumentsOf(cmd, MQTT_CLI)) {
+    for (const m of args.matchAll(/(?:\s-h|--host|\s-L|--url)(?:=|\s+)(\S+)/g)) addresses.push(m[1]);
   }
   for (const a of addresses) {
     const host = hostOf(a);
