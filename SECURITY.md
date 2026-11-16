@@ -31,6 +31,7 @@ These are tested; each line names what checks it.
 | Message content is capped and redacted before it leaves the server, including on the status board | `PayloadFormatterTest`, `RedactorTest`, `KafkaMessagesIT`, `BoardIT` |
 | Every tool call is recorded without message content, and a call that cannot be recorded is not answered | `AuditLogTest`, `AccessAndAuditIT` |
 | A broker password is not in any answer or error message | `SecuredStackIT` (with a wrong password), `KafkaClientsTest` |
+| Over TLS, a broker whose certificate is not in the source's trust store is not read | `TlsStackIT` |
 | HTTP mode does not start without a token and answers nothing without it | `HttpIT` |
 | The status board refuses foreign host names and foreign WebSocket origins | `BoardIT` |
 
@@ -43,7 +44,7 @@ Know these before you rely on it.
 - **MQTT deny rules act on arrival.** If the broker delivers a message on a denied topic, the server has received it before dropping it. Only the broker's access rules keep it from being sent.
 - **HTTP mode has one shared token and no encryption.** It is not user authentication, the audit log cannot tell callers apart, and the token travels in the clear. Use it on one machine, or behind a reverse proxy that does TLS.
 - **The status board has no login.** It is bound to 127.0.0.1 and guarded against other web pages, not against other programs or users on the same machine.
-- **TLS and SCRAM to brokers are untested against real brokers.** They are passed to the client libraries as configured.
+- **Encrypted connections to brokers are tested in one combination each** (`TlsStackIT`): Kafka over TLS with SCRAM-SHA-512, Mosquitto over `ssl://`, with a PKCS12 trust store. Other mechanisms and store types are passed to the client libraries as configured and are untried. Client certificates are not supported for MQTT.
 - **The audit log is a plain local file.** Whoever can write to it can change it. It is not tamper-proof and it is not rotated.
 - **The development hook** (`.claude/hooks/block-dangerous.mjs`) is a safety net for people who work on this repository with an AI agent. It matches text and can be both evaded and wrong. It is not part of the product's security.
 - **The local stack's passwords are public.** `simulator-local-only` and `topicscope-local-only` are in this repository on purpose and protect nothing. Never reuse them.

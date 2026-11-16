@@ -223,6 +223,8 @@ topic-scope:
       properties:
         security.protocol: SASL_SSL
         sasl.mechanism: SCRAM-SHA-512
+        ssl.truststore.location: /etc/topic-scope/kafka-truststore.p12
+        ssl.truststore.password: ${TOWER_TRUSTSTORE_PASSWORD}
       topics:
         allow: ["surveillance.*"]
         deny: ["*.internal"]
@@ -231,13 +233,16 @@ topic-scope:
       address: ssl://mqtt-host:8883
       username: viewer
       password: ${FIELD_MQTT_PASSWORD}
+      properties:                            # 브로커의 인증서를 Java가 기본으로 신뢰하지 않을 때만 필요합니다
+        ssl.truststore.location: /etc/topic-scope/mqtt-truststore.p12
+        ssl.truststore.password: ${FIELD_TRUSTSTORE_PASSWORD}
 ```
 
 `sources`를 정의한 파일은 기본 소스 두 개를 통째로 대체합니다. 전체 설정은 README의 [Configuration](../README.md#configuration)에 있습니다.
 
 **서버에는 읽기만 가능한 계정을 주십시오.** Kafka: 토픽에 `Describe`, `DescribeConfigs`, `Read`, 컨슈머 그룹과 클러스터에 `Describe`. MQTT: 구독만. 서버는 어차피 쓰지 못하지만, 브로커가 강제하는 규칙은 이 프로그램이 옳다는 것에 기대지 않습니다. 로컬 스택이 이렇게 구성돼 있고, 서버 계정으로 쓰기를 시도해 브로커가 거부하는 것을 테스트로 확인합니다.
 
-실제 브로커로 확인한 것은 Kafka의 SASL/PLAIN과 Mosquitto의 사용자명·비밀번호입니다. TLS, SCRAM, `ssl://`은 위 설명대로 구현돼 있지만 실제 브로커로 시험하지 않았습니다.
+실제 브로커로 확인한 것(테스트 `TlsStackIT`, 테스트용으로 만든 인증서 사용): TLS 위에서 SCRAM-SHA-512로 로그인하고 PKCS12 신뢰 저장소를 쓰는 Kafka, 그리고 사용자명·비밀번호와 PKCS12 신뢰 저장소를 쓰는 `ssl://` Mosquitto. TLS 없는 Kafka의 SASL/PLAIN과 Mosquitto의 `tcp://`도 확인했습니다. 확인하지 않은 것: SCRAM-SHA-256, JKS 신뢰 저장소, 클라이언트 인증서, Kerberos와 OAuth 로그인.
 
 ## 감사 로그
 

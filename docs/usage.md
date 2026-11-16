@@ -223,6 +223,8 @@ topic-scope:
       properties:
         security.protocol: SASL_SSL
         sasl.mechanism: SCRAM-SHA-512
+        ssl.truststore.location: /etc/topic-scope/kafka-truststore.p12
+        ssl.truststore.password: ${TOWER_TRUSTSTORE_PASSWORD}
       topics:
         allow: ["surveillance.*"]
         deny: ["*.internal"]
@@ -231,13 +233,16 @@ topic-scope:
       address: ssl://mqtt-host:8883
       username: viewer
       password: ${FIELD_MQTT_PASSWORD}
+      properties:                            # only needed when Java does not trust the broker's certificate by itself
+        ssl.truststore.location: /etc/topic-scope/mqtt-truststore.p12
+        ssl.truststore.password: ${FIELD_TRUSTSTORE_PASSWORD}
 ```
 
 A file that defines `sources` replaces the built-in two. The full reference is in the README under [Configuration](../README.md#configuration).
 
 **Give the server an account that can only read.** On Kafka: `Describe`, `DescribeConfigs` and `Read` on topics, `Describe` on consumer groups and on the cluster. On MQTT: subscribe only. The server cannot write anyway, but a rule that the broker enforces does not depend on this program being right. The local stack is set up this way, and a test tries to write with the server's account to show that the brokers refuse.
 
-Tried against real brokers: SASL/PLAIN on Kafka and user name with password on Mosquitto. TLS, SCRAM and `ssl://` are implemented as described but have not been tried against a broker.
+Tried against real brokers (the test `TlsStackIT`, with a certificate made for the test): Kafka over TLS with a SCRAM-SHA-512 login and a PKCS12 trust store, and Mosquitto over `ssl://` with a user name, a password and a PKCS12 trust store; also SASL/PLAIN without TLS on Kafka and plain `tcp://` on Mosquitto. Not tried: SCRAM-SHA-256, JKS trust stores, client certificates, Kerberos and OAuth logins.
 
 ## The audit log
 

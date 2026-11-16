@@ -97,8 +97,10 @@ public record TopicScopeProperties(List<Source> sources, Duration probeTimeout, 
    *     or {@code ssl://host:port} for TLS)
    * @param username the account to log in with; empty for a broker that asks for none
    * @param password its password. It is used to log in and nowhere else: it is never shown, logged or recorded
-   * @param properties Kafka only: further client settings for encryption and login, such as {@code security.protocol},
-   *     {@code sasl.mechanism} or {@code ssl.truststore.location}. Only settings of those kinds are accepted
+   * @param properties further settings for encryption and login. Kafka: client settings such as {@code security.protocol},
+   *     {@code sasl.mechanism} or {@code ssl.truststore.location}. MQTT: {@code ssl.truststore.location},
+   *     {@code ssl.truststore.password} and {@code ssl.truststore.type}, for an {@code ssl://} address whose
+   *     certificate Java does not trust by itself. Only settings of those kinds are accepted
    * @param topics which topics of this source the tools may show; everything when left out
    */
   public record Source(String name, SourceType type, String address, String username, String password, Map<String, String> properties,

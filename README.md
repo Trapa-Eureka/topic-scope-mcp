@@ -316,7 +316,8 @@ topic-scope:
       properties:                            # Kafka only: encryption and login settings, nothing else is accepted
         security.protocol: SASL_SSL
         sasl.mechanism: SCRAM-SHA-512
-        ssl.truststore.location: /etc/topic-scope/truststore.jks
+        ssl.truststore.location: /etc/topic-scope/kafka-truststore.p12
+        ssl.truststore.password: ${TOWER_TRUSTSTORE_PASSWORD}
       topics:
         allow: ["surveillance.*", "flightplan.*"]
         deny: ["*.internal"]
@@ -325,6 +326,9 @@ topic-scope:
       address: ssl://mqtt-host:8883          # tcp:// without TLS, ssl:// with
       username: viewer
       password: ${FIELD_MQTT_PASSWORD}
+      properties:                            # MQTT: only the trust store for an ssl:// address
+        ssl.truststore.location: /etc/topic-scope/mqtt-truststore.p12
+        ssl.truststore.password: ${FIELD_TRUSTSTORE_PASSWORD}
       topics:
         deny: ["plant/*/maintenance/*"]
 ```
@@ -334,9 +338,10 @@ A file that defines `sources` replaces the default list as a whole.
 #### Logging in
 
 - **Kafka**: with a `username`, the server logs in with SASL. The defaults are `security.protocol: SASL_PLAINTEXT` and `sasl.mechanism: PLAIN`; set them under `properties` for TLS (`SASL_SSL`) or SCRAM. `properties` takes settings that start with `security.protocol`, `sasl.`, `ssl.` or `client.dns.lookup`. Any other setting stops the server at start-up, so a configuration file cannot give the look-only consumer a group or switch its auto-commit on.
-- **MQTT**: `username` and `password`, over `tcp://` or `ssl://`. TLS uses the Java trust store; a private certificate authority has to be added there. Client certificates are not supported.
+- **MQTT**: `username` and `password`, over `tcp://` or `ssl://`. For a broker whose certificate Java does not trust by itself (a private certificate authority, a self-signed certificate), name a trust store under `properties`: `ssl.truststore.location`, `ssl.truststore.password`, and `ssl.truststore.type` (`PKCS12` unless said otherwise). Those three are the only properties an MQTT source takes. The server's name is always checked against its certificate. Client certificates are not supported.
+- A property that is not allowed, or a trust store that cannot be read, stops the server at start-up with the name of the source and the file.
 - A password is used to log in and nowhere else. It is not part of any answer, error message or audit line, and a test checks that with a wrong password.
-- Tried against the local stack: SASL/PLAIN on Kafka, user name and password on Mosquitto. **TLS, SCRAM and `ssl://` are configured as described but have not been tried against a broker.**
+- Tried against real brokers (the test `TlsStackIT`, with a certificate made for the test): Kafka over TLS with a SCRAM-SHA-512 login and a PKCS12 trust store, and Mosquitto over `ssl://` with a user name, a password and a PKCS12 trust store; also SASL/PLAIN without TLS on Kafka and plain `tcp://` on Mosquitto. Not tried: SCRAM-SHA-256, JKS trust stores, client certificates, Kerberos and OAuth logins.
 
 #### Which topics may be shown
 
@@ -443,7 +448,7 @@ It is a safety net, not a complete defense. It matches command text and the text
 ## Known limitations
 
 - **Only Apache Kafka 4.3 and Mosquitto 2.0 have been tried**, in Docker, on macOS. Other brokers, other versions and Windows have not.
-- **TLS, SCRAM and `ssl://` to brokers are untested against a real broker.** They are passed on to the client libraries as configured. What has been tried is SASL/PLAIN on Kafka and user name with password on MQTT.
+- **Encrypted connections have been tried in one combination each**: Kafka over TLS with SCRAM-SHA-512, Mosquitto over `ssl://`, both with a PKCS12 trust store and a certificate made for the test. SCRAM-SHA-256, JKS trust stores, Kerberos and OAuth have not been tried. Client certificates are not supported for MQTT and untried for Kafka.
 - **Only Claude Code has been tried as an MCP client**: over stdin/stdout from the jar and from the Docker image, and over HTTP (how, and with which version, is in the [usage guide](docs/usage.md)). Claude Desktop and other clients have not.
 - **HTTP mode has one shared token and no encryption.** It is not user authentication. Use it on one machine or behind a reverse proxy that does TLS.
 - **The status board has no login** and is meant for one machine. Its page is checked by eye, not by a browser test.
@@ -500,7 +505,7 @@ Each phase ends with something that can be run and checked. A phase is done when
 - [x] **Phase 8 — Web status board.** A React page that shows the three views and updates over a WebSocket, served by the server in board mode. *Check: stopping the slow consumer changes the board without a reload.* (Checked in Chrome against the compose stack, see the second screenshot above; and by `BoardIT`, which reads the WebSocket while the consumer is stopped and released.)
 - [x] **Phase 9 — Release.** Docker image, HTTP transport, usage guide in English and Korean, screenshots, `CHANGELOG.md`, `SECURITY.md`, v0.1.0. *Check: the image runs in all three modes against the local stack; `HttpIT` for HTTP mode.*
 
-What could come next, in no promised order: a published image and jar; a run of the tests in CI; TLS and SCRAM tried against real brokers; a browser test for the board; user accounts for HTTP mode.
+What could come next, in no promised order: a published image and jar; a run of the tests in CI; client certificates; a browser test for the board; user accounts for HTTP mode.
 
 ## Contributing
 

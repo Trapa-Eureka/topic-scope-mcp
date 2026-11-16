@@ -6,6 +6,14 @@ Until 1.0.0 the names of tools, arguments, result fields and settings may still 
 
 ## [Unreleased]
 
+### Added
+
+- An MQTT source can name its own trust store under `properties` (`ssl.truststore.location`, `ssl.truststore.password`, `ssl.truststore.type`), for an `ssl://` broker whose certificate Java does not trust by itself. Until now that needed a trust store for the whole Java process. Those three are the only properties an MQTT source takes; another one, or a trust store that cannot be read, stops the server at start-up.
+
+### Documentation
+
+- Encrypted connections have now been tried against real brokers, in a test that makes its own certificate (`TlsStackIT`): Kafka over TLS with a SCRAM-SHA-512 login, and Mosquitto over `ssl://`. Both worked as the 0.1.0 documentation described. Without the trust store the certificate is not trusted and nothing is read; a wrong SCRAM password is refused with the reason.
+
 ## [0.1.1] - 2026-11-17
 
 Three things found by using 0.1.0 for real, and a walkthrough. Nothing was removed; one tool result gained two fields.
