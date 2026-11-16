@@ -27,6 +27,10 @@ spring:
 topic-scope:
   probe-timeout: 5s      # list_sources: how long to wait for a broker to answer
   request-timeout: 10s   # every other tool: how long one question to a broker may take
+  limits:                # hard caps on message content; a caller cannot raise them
+    max-messages: 100      # most messages one call returns
+    max-value-chars: 2000  # most characters shown of one value
+    max-total-chars: 40000 # most characters of values in one answer
   sources:
     - name: local-kafka
       type: kafka

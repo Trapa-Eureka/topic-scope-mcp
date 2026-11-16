@@ -24,7 +24,7 @@ The first two are enforced by `.claude/hooks/block-dangerous.mjs`. If it blocks 
 ## Layout
 
 - `simulator/` — seeds and feeds the local brokers. The only module that may publish. `DemoData.java` is the single source of the demo data; tests compare against its constants
-- `server/` — the MCP server. Broker access only in `kafka/` and `mqtt/`; `tools/` stays thin. `ReadOnlyArchitectureTest` fails the build on any broker-client call outside its allow lists
+- `server/` — the MCP server. Broker access only in `kafka/` and `mqtt/`; `tools/` stays thin; every message value, key and header passes `safety/PayloadFormatter` before it is returned. `ReadOnlyArchitectureTest` fails the build on any broker-client call outside its allow lists
 
 ## Procedures
 

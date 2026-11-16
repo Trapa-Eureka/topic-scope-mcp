@@ -25,7 +25,7 @@ class TopicServiceTest {
 
   static final TopicScopeProperties PROPERTIES = new TopicScopeProperties(List.of(
       new Source("k", SourceType.KAFKA, "kafka:9092"),
-      new Source("m", SourceType.MQTT, "tcp://user:secret@mqtt:1883")), null, null);
+      new Source("m", SourceType.MQTT, "tcp://user:secret@mqtt:1883")), null, null, null);
 
   /** A cluster made of the given topics. */
   static class PretendCluster extends KafkaTopicReader {

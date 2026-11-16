@@ -113,9 +113,7 @@ public class TopicService {
     String name = topic.trim();
 
     return sources.ask(source, () -> {
-      List<TopicInfo> found = kafka.describe(source.address(), List.of(name), properties.requestTimeout());
-      if (found.isEmpty()) throw new ToolProblem("There is no topic named '" + name + "' on source '" + source.name() + "'.", otherTopics(source, name));
-      TopicInfo info = found.get(0);
+      TopicInfo info = requireTopic(source, name);
       Instant now = clock.instant();
 
       List<PartitionRow> partitions = info.partitions().stream().map(TopicService::partitionRow).toList();
@@ -134,6 +132,16 @@ public class TopicService {
       }
       return new TopicDetail(source.name(), row(info, now), partitions, settings, String.join(" ", notes));
     });
+  }
+
+  /**
+   * The topic with its partitions, or a problem that names the topics that do exist.
+   * Asks the broker, so call it inside {@link Sources#ask}.
+   */
+  TopicInfo requireTopic(Source source, String name) throws Exception {
+    List<TopicInfo> found = kafka.describe(source.address(), List.of(name), properties.requestTimeout());
+    if (found.isEmpty()) throw new ToolProblem("There is no topic named '" + name + "' on source '" + source.name() + "'.", otherTopics(source, name));
+    return found.get(0);
   }
 
   /** Names the topics that do exist, closest matches first, so the caller can correct itself in one step. */

@@ -26,7 +26,7 @@ class McpServerIT {
       assertThat(hello.instructions()).contains("Read-only");
 
       List<McpSchema.Tool> tools = client.listTools().tools();
-      assertThat(tools).extracting(McpSchema.Tool::name).containsExactlyInAnyOrder("list_sources", "list_topics", "describe_topic");
+      assertThat(tools).extracting(McpSchema.Tool::name).containsExactlyInAnyOrder("list_sources", "list_topics", "describe_topic", "recent_messages");
       // Holds for every tool, including the ones later phases add: all of them only read.
       assertThat(tools).allSatisfy(tool -> {
         assertThat(tool.description()).as(tool.name() + " description").isNotBlank();

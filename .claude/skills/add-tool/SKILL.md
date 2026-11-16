@@ -13,6 +13,7 @@ Stack: Spring Boot 4.1 + Spring AI 2.0 (`spring-ai-starter-mcp-server`), MCP ove
 |---|---|---|
 | `io.topicscope.kafka`, `io.topicscope.mqtt` | everything that talks to a broker | yes, read methods only |
 | `io.topicscope.tools` | `*Tools` (the `@McpTool` methods) and `*Service` (shapes the result) | no, not even their types: readers return their own records |
+| `io.topicscope.safety` | `PayloadFormatter` (bytes to a capped, redacted display) and `Redactor` | no |
 | `io.topicscope.config` | `topic-scope.*` properties | no |
 
 ## The tool method
@@ -34,6 +35,10 @@ public SomeRecord name(@McpToolParam(description = "...", required = true) Strin
 - A call that cannot be answered throws `new ToolProblem(problem, hint)`: one sentence for what is wrong, one for what would work (the names that exist, the tool to call instead). Spring AI prints the message, a line break and the root cause's message, so a plain exception shows its message twice; `ToolProblem` carries the hint as its cause for that reason. Never throw anything else on purpose.
 - `list_sources` is the exception: there an unreachable broker is a row, because reachability is the answer.
 - Times are ISO-8601 in UTC to the second (`TopicService.time`); "no time" is `""`, "no number" is `-1`.
+- **Message content never leaves raw.** Every value, key and header goes through `PayloadFormatter.format(bytes, maxChars)`; a header whose name is `Redactor.secretName` is replaced whole. Keep a per-answer budget (see `MessageService.rows`). Readers return bytes; only the service formats.
+- Kafka clients come from `KafkaClients` only. Its consumer has no group, auto-commit off and topic auto-creation off; do not build one anywhere else, and do not add `group.id`.
+- Reading a live topic must end: take the end offsets once and stop there (`KafkaRecordReader.tail`), judge "finished" by `position`, not by the last record seen, and keep only what is needed in memory.
+- A pattern that scans payload text must be linear. A name-like run with `*` that is retried from each character took seconds on 20 kB; `PayloadFormatterTest.aLargePayloadIsFormattedQuickly` guards it.
 - Cap every list (see `TopicService.MAX_TOPICS`) and say in a `note` field when something was cut or is worth knowing. The note is `""` when there is nothing to say.
 
 ## Things that only break in the packaged jar

@@ -23,7 +23,7 @@ class SourceServiceTest {
     int closedPort = closedPort();
     TopicScopeProperties properties = new TopicScopeProperties(List.of(
         new Source("k", SourceType.KAFKA, "127.0.0.1:" + closedPort),
-        new Source("m", SourceType.MQTT, "tcp://127.0.0.1:" + closedPort)), Duration.ofSeconds(1), null);
+        new Source("m", SourceType.MQTT, "tcp://127.0.0.1:" + closedPort)), Duration.ofSeconds(1), null, null);
 
     long start = System.nanoTime();
     SourceService.SourceList result = new SourceService(properties, new KafkaProbe(), new MqttProbe()).listSources();
@@ -41,7 +41,7 @@ class SourceServiceTest {
 
   @Test
   void noSourcesIsAnEmptyList() {
-    TopicScopeProperties properties = new TopicScopeProperties(null, null, null);
+    TopicScopeProperties properties = new TopicScopeProperties(null, null, null, null);
     assertThat(properties.requestTimeout()).isEqualTo(Duration.ofSeconds(10));
     assertThat(properties.probeTimeout()).isEqualTo(Duration.ofSeconds(5));
     SourceService.SourceList result = new SourceService(properties, new KafkaProbe(), new MqttProbe()).listSources();
@@ -69,7 +69,7 @@ class SourceServiceTest {
   @Test
   void sourceNamesMustBeUniqueAndComplete() {
     Source a = new Source("same", SourceType.KAFKA, "h:1");
-    org.assertj.core.api.Assertions.assertThatThrownBy(() -> new TopicScopeProperties(List.of(a, a), null, null))
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> new TopicScopeProperties(List.of(a, a), null, null, null))
         .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("same");
     org.assertj.core.api.Assertions.assertThatThrownBy(() -> new Source("x", SourceType.MQTT, " "))
         .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("address");
