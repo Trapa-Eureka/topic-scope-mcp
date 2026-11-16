@@ -63,7 +63,12 @@ class TopicServiceTest {
   }
 
   static TopicService service(PretendCluster cluster) {
-    return new TopicService(new Sources(PROPERTIES), cluster, PROPERTIES, Clock.fixed(NOW, ZoneOffset.UTC));
+    return service(cluster, new PretendMqtt());
+  }
+
+  static TopicService service(PretendCluster cluster, PretendMqtt mqtt) {
+    Sources sources = new Sources(PROPERTIES);
+    return new TopicService(sources, cluster, new MqttService(sources, mqtt, PROPERTIES), PROPERTIES, Clock.fixed(NOW, ZoneOffset.UTC));
   }
 
   @Test
@@ -73,7 +78,7 @@ class TopicServiceTest {
         healthy(1, 0, 50, ONE_MINUTE_AGO),
         new KafkaTopicReader.PartitionInfo(2, 1, List.of(1, 2, 3), List.of(1), 0, 0, -1));
 
-    TopicService.TopicList list = service(cluster).listTopics("k", null, null);
+    TopicService.TopicList list = service(cluster).listTopics("k", null, null, null, null);
 
     assertThat(list.source()).isEqualTo("k");
     assertThat(list.type()).isEqualTo("KAFKA");
@@ -85,7 +90,7 @@ class TopicServiceTest {
   @Test
   void anEmptyTopicHasNoNewestMessage() {
     PretendCluster cluster = new PretendCluster().topic("empty", false, healthy(0, 0, 0, -1));
-    TopicService.TopicRow row = service(cluster).listTopics("k", null, null).topics().get(0);
+    TopicService.TopicRow row = service(cluster).listTopics("k", null, null, null, null).topics().get(0);
     assertThat(row.messages()).isZero();
     assertThat(row.newestMessageTime()).isEmpty();
     assertThat(row.newestMessageAgeSeconds()).isEqualTo(-1);
@@ -97,7 +102,7 @@ class TopicServiceTest {
         healthy(0, 0, 40, ONE_MINUTE_AGO),
         new KafkaTopicReader.PartitionInfo(1, -1, List.of(1, 2), List.of(), -1, -1, -1));
 
-    TopicService.TopicRow row = service(cluster).listTopics("k", null, null).topics().get(0);
+    TopicService.TopicRow row = service(cluster).listTopics("k", null, null, null, null).topics().get(0);
     assertThat(row.messages()).isEqualTo(40);
     assertThat(row.offlinePartitions()).isEqualTo(1);
     assertThat(row.underReplicatedPartitions()).isEqualTo(1);
@@ -113,9 +118,9 @@ class TopicServiceTest {
         .topic("__consumer_offsets", true, healthy(0, 0, 9, ONE_MINUTE_AGO))
         .topic("orders", false, healthy(0, 0, 1, ONE_MINUTE_AGO));
 
-    assertThat(service(cluster).listTopics("k", null, null).topics()).extracting(TopicService.TopicRow::name).containsExactly("orders");
-    assertThat(service(cluster).listTopics("k", null, false).topics()).extracting(TopicService.TopicRow::name).containsExactly("orders");
-    assertThat(service(cluster).listTopics("k", null, true).topics()).extracting(TopicService.TopicRow::name).containsExactly("__consumer_offsets", "orders");
+    assertThat(service(cluster).listTopics("k", null, null, null, null).topics()).extracting(TopicService.TopicRow::name).containsExactly("orders");
+    assertThat(service(cluster).listTopics("k", null, false, null, null).topics()).extracting(TopicService.TopicRow::name).containsExactly("orders");
+    assertThat(service(cluster).listTopics("k", null, true, null, null).topics()).extracting(TopicService.TopicRow::name).containsExactly("__consumer_offsets", "orders");
   }
 
   @Test
@@ -124,13 +129,13 @@ class TopicServiceTest {
         .topic("Flights.Positions", false, healthy(0, 0, 1, ONE_MINUTE_AGO))
         .topic("sensors.telemetry", false, healthy(0, 0, 1, ONE_MINUTE_AGO));
 
-    assertThat(service(cluster).listTopics("k", " flights ", null).topics()).extracting(TopicService.TopicRow::name).containsExactly("Flights.Positions");
+    assertThat(service(cluster).listTopics("k", " flights ", null, null, null).topics()).extracting(TopicService.TopicRow::name).containsExactly("Flights.Positions");
 
-    TopicService.TopicList none = service(cluster).listTopics("k", "billing", null);
+    TopicService.TopicList none = service(cluster).listTopics("k", "billing", null, null, null);
     assertThat(none.topics()).isEmpty();
     assertThat(none.matching()).isZero();
     assertThat(none.note()).isEqualTo("No topic name contains 'billing'.");
-    assertThat(service(new PretendCluster()).listTopics("k", null, null).note()).isEqualTo("This cluster has no topics.");
+    assertThat(service(new PretendCluster()).listTopics("k", null, null, null, null).note()).isEqualTo("This cluster has no topics.");
   }
 
   @Test
@@ -138,7 +143,7 @@ class TopicServiceTest {
     PretendCluster cluster = new PretendCluster();
     IntStream.range(0, 250).forEach(i -> cluster.topic(String.format("t%03d", i), false, healthy(0, 0, 1, ONE_MINUTE_AGO)));
 
-    TopicService.TopicList list = service(cluster).listTopics("k", null, null);
+    TopicService.TopicList list = service(cluster).listTopics("k", null, null, null, null);
     assertThat(list.matching()).isEqualTo(250);
     assertThat(list.shown()).isEqualTo(200);
     assertThat(list.topics()).hasSize(200);
@@ -198,18 +203,14 @@ class TopicServiceTest {
 
   @Test
   void anUnknownSourceIsAnsweredWithTheNamesThatExist() {
-    assertThat(problem(() -> service(new PretendCluster()).listTopics("prod", null, null)))
+    assertThat(problem(() -> service(new PretendCluster()).listTopics("prod", null, null, null, null)))
         .isEqualTo("There is no source named 'prod'. Configured sources: k (kafka), m (mqtt).");
-    assertThat(problem(() -> service(new PretendCluster()).listTopics(null, null, null)))
+    assertThat(problem(() -> service(new PretendCluster()).listTopics(null, null, null, null, null)))
         .isEqualTo("The 'source' argument is missing. Configured sources: k (kafka), m (mqtt).");
   }
 
   @Test
-  void mqttSourcesAreNotListedYetAndCannotBeDescribed() {
-    TopicService.TopicList list = service(new PretendCluster()).listTopics("m", null, null);
-    assertThat(list.type()).isEqualTo("MQTT");
-    assertThat(list.topics()).isEmpty();
-    assertThat(list.note()).contains("not available yet");
+  void anMqttSourceCannotBeDescribed() {
 
     assertThat(problem(() -> service(new PretendCluster()).describeTopic("m", "demo/sensors")))
         .isEqualTo("describe_topic works on Kafka sources, and 'm' is an MQTT source. An MQTT broker keeps no partitions, offsets or settings per topic.");
@@ -219,7 +220,7 @@ class TopicServiceTest {
   void aBrokerFailureBecomesAMessageWithoutThePassword() {
     PretendCluster cluster = new PretendCluster();
     cluster.failure = new java.util.concurrent.ExecutionException(new java.util.concurrent.TimeoutException());
-    assertThat(problem(() -> service(cluster).listTopics("k", null, null)))
+    assertThat(problem(() -> service(cluster).listTopics("k", null, null, null, null)))
         .isEqualTo("Source 'k' (kafka:9092) could not be read: no answer within the timeout. Call list_sources to see whether it answers at all.");
 
     Sources sources = new Sources(PROPERTIES);

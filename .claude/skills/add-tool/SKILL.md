@@ -41,6 +41,8 @@ public SomeRecord name(@McpToolParam(description = "...", required = true) Strin
 - A pattern that scans payload text must be linear. A name-like run with `*` that is retried from each character took seconds on 20 kB; `PayloadFormatterTest.aLargePayloadIsFormattedQuickly` guards it.
 - Anything judged from movement needs two looks on one connection (`KafkaGroupReader.sampleTwice`) and a rule that is a pure function with its own tests (`LagStatus.judge`). Say in the answer how long the sample really was.
 - A test that needs things to move gets brokers of its own with `LiveTraffic` (see `KafkaLagIT`); the shared brokers stay frozen.
+- MQTT is only ever listened to, through `MqttService.listen` (one window, one throwaway connection: random client id, clean session, no will). The observer hands over messages one at a time; add things up in the tool layer. Say in the note that the answer is an observation, with the filter and the real window length.
+- One tool, both kinds of source: keep one result shape and document which fields are -1, empty or false for the other kind (see `MessageRow`). Do not add a second tool for the same question.
 - Cap every list (see `TopicService.MAX_TOPICS`) and say in a `note` field when something was cut or is worth knowing. The note is `""` when there is nothing to say.
 
 ## Things that only break in the packaged jar

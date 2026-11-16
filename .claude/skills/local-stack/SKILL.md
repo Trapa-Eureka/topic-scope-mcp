@@ -44,6 +44,8 @@ On a seeded stack nobody is connected and nothing arrives, so every backlog is `
 
 MQTT: four retained messages `demo/sensors/<site>/<name>/status`. In live mode each sensor publishes `.../telemetry` every 2 s (not retained); `rwy-27/rvr` stops after 60 s.
 
+What the MQTT tools show: on a seeded stack `list_topics` lists the four status topics (retained, 0 messages) and every telemetry topic is `SILENT`. In live mode `topic_freshness` with `expectedIntervalSeconds: 2` reports three telemetry topics `FRESH`; `rwy-27/rvr` is `STALE` only in a window that covers the moment it stops, and after that it is missing behind a wildcard and `SILENT` when named exactly. To watch it turn stale, start with `SIM_SILENT_AFTER_SECONDS=20` and call `topic_freshness` with `windowSeconds: 30` right away.
+
 ## Looking with the brokers' own tools
 
 Use these to cross-check what the server reports. They run inside the containers, so they only ever reach the local stack.

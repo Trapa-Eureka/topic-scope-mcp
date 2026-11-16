@@ -8,6 +8,7 @@ A read-only MCP server (Java 21, Spring Boot, Spring AI MCP) that shows an AI as
 
 - **The server only reads.** No publish, no offset commit, no consumer group, no admin write. Read Kafka records with `assign` + `seek`.
 - **Only the local stack.** Never point a tool, a test or a command at a broker that is not from `compose.yaml`.
+- **An MQTT answer is an observation.** A broker keeps no catalog and no history; say what was listened to and for how long.
 - **A feature is done when its check passes**, not when the code is written. Mark it Done in the README only then, and say so plainly when something was not tried.
 - All files are in English, except `docs/*.ko.md`.
 

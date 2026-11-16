@@ -2,8 +2,8 @@
 
 A **read-only** MCP server that lets an AI assistant look inside Kafka and MQTT brokers: which topics exist, what the latest messages are, and whether consumers are keeping up.
 
-> **Status: Phases 0 to 5 of 9 done. All three views work for Kafka: topic list, recent messages, lag.**
-> What exists: an MCP server with six tools (`list_sources`, `list_topics`, `describe_topic`, `recent_messages`, `list_consumer_groups`, `consumer_lag`), a build that fails if server code could change a broker, and a [local stack](#local-stack-and-demo-data) of Kafka and Mosquitto with demo data known in advance. MQTT comes in Phase 6. Every feature below is marked **Planned** until it has a test that proves it.
+> **Status: Phases 0 to 6 of 9 done. All three views work for Kafka and for MQTT.**
+> What exists: an MCP server with seven tools (`list_sources`, `list_topics`, `describe_topic`, `recent_messages`, `list_consumer_groups`, `consumer_lag`, `topic_freshness`), a build that fails if server code could change a broker, and a [local stack](#local-stack-and-demo-data) of Kafka and Mosquitto with demo data known in advance. Still to come: broker accounts, topic allow and deny lists and the audit log (Phase 7), an optional web status board (Phase 8), a release (Phase 9).
 
 **Jump to:** [What it shows](#what-it-shows) · [Tools](#tools) · [Safety](#safety) · [Roadmap](#roadmap) · [Installation](#installation)
 
@@ -27,9 +27,11 @@ An MCP server has no screen of its own. "The screen" is the assistant's chat: yo
 
 | | Kafka | MQTT |
 |---|---|---|
-| Where the list comes from | The broker's own catalog (Admin API) | **There is no catalog.** A topic exists only while messages are published to it, so the list is "topics seen while listening to a filter (default `#`) for a few seconds", plus retained messages |
-| Columns | name, partitions, replication factor, internal or not, messages kept (end offset − start offset), time and age of newest message | topic, messages seen in the window, has a retained message or not, QoS, time of newest message |
-| Says clearly | under-replicated partitions, and partitions without a leader (their messages are not counted) | that the list is an observation, with the window length |
+| Where the list comes from | The broker's own catalog (Admin API) | **There is no catalog.** A topic exists only while messages are published to it, so the list is "topics heard while listening on a filter (default `#`) for a few seconds (default 3, 1 to 30)", plus the topics that hold a retained message |
+| Columns | name, partitions, replication factor, internal or not, messages kept (end offset − start offset), time and age of newest message | topic, messages published during the window, has a retained message or not, highest QoS seen, arrival time of the newest message |
+| Says clearly | under-replicated partitions, and partitions without a leader (their messages are not counted) | that the list is an observation, with the filter and the real window length; and that a topic which was silent and has no retained message is missing |
+
+`#` does not match topics that start with `$`, such as the broker's own `$SYS` topics.
 
 "Messages kept" is an upper bound for compacted topics and topics written with transactions, where offsets have gaps. `describe_topic` says so in its note when the topic is compacted. An empty topic has no newest message: the time is empty and the age is -1.
 
@@ -37,8 +39,10 @@ An MCP server has no screen of its own. "The screen" is the assistant's chat: yo
 
 | | Kafka | MQTT |
 |---|---|---|
-| What "recent" means | The newest *N* records stored in the topic (default 10, at most 100), newest first, read by position without a consumer group. Over all partitions, or one partition on request | **The broker keeps no history.** You get the retained message (if any) plus whatever arrives while listening for a few seconds |
-| Columns | partition, offset, timestamp, key, headers, value, value format, value size, truncated or not, redacted or not | topic, receive time, QoS, retained flag, payload |
+| What "recent" means | The newest *N* records stored in the topic (default 10, at most 100), newest first, read by position without a consumer group. Over all partitions, or one partition on request | **The broker keeps no history.** `topic` is a topic or a topic filter; you get the retained message of each matching topic plus whatever is published while listening (default 3 s, 1 to 30), newest first |
+| Columns | partition, offset, timestamp, key, headers, value, value format, value size, truncated or not, redacted or not | the concrete topic, arrival time, QoS, retained or not, value, value format, value size, truncated or not, redacted or not |
+
+Both kinds of source answer with the same row shape. A field that only one of them has is -1, empty or false for the other (an MQTT message has no partition, offset, key or headers; a Kafka record has no QoS and is never "retained").
 | Value display | see below | same |
 
 How a value is shown (`valueFormat`):
@@ -64,10 +68,11 @@ Records that arrive after the call started are not included; a busy topic would 
 
 | | Kafka | MQTT |
 |---|---|---|
-| Definition | **Consumer lag** = newest offset in a partition − offset the consumer group has committed. In messages | No offsets exist, so two substitutes: **freshness** = seconds since the last message on a topic; **delivery delay** = receive time − timestamp inside the payload (only when the payload has one) |
+| Definition | **Consumer lag** = newest offset in a partition − offset the consumer group has committed. In messages | No offsets exist, so two substitutes: **freshness** = seconds since the last message on a topic; **delivery delay** = arrival time − timestamp inside the payload (only when the payload is JSON with a field such as `ts` or `timestamp`) |
 | Columns | per group: state, members, lag, lag change, status, a one-sentence summary. Per topic: lag, lag change, messages read and messages arrived during the sample, status. Per partition: committed offset, end offset, lag | topic, last seen, expected interval, freshness, status |
-| Status | `OK` / `LAGGING` / `STALLED` / `NO_CONSUMER`, see below | `FRESH` / `STALE` (silent for longer than the expected interval) / `SILENT` (nothing in the window) |
-| Also shown | time lag: age of the oldest message the group has not read yet | broker counters from `$SYS` (queued, dropped) when the broker publishes them |
+| Columns (MQTT) | | topic, status, time and age of the newest message, messages during the window, retained or not, delivery delay |
+| Status | `OK` / `LAGGING` / `STALLED` / `NO_CONSUMER`, see below | `FRESH` / `STALE` / `SILENT`, see [freshness](#freshness) |
+| Also shown | time lag: age of the oldest message the group has not read yet | what the broker reports about itself under `$SYS` (clients connected, messages stored, messages dropped, ...) when it does |
 
 One look cannot tell a slow consumer from a stopped one: both show a lag. So `consumer_lag` **looks twice**, a few seconds apart (`sampleSeconds`, default 5, 1 to 30), and judges each topic of the group by what moved in between:
 
@@ -81,6 +86,23 @@ One look cannot tell a slow consumer from a stopped one: both show a lag. So `co
 A group gets the status that most needs attention among its topics. The judgement is per topic and not per partition on purpose: a slow consumer drains one partition at a time, so single partitions stand still while the group as a whole is moving.
 
 Limits of the judgement: it is only as good as the sample. A consumer that commits less often than the sample is long looks `STALLED`; use a longer sample for those.
+
+#### Freshness
+
+`topic_freshness` answers "is anything still arriving?" for topics that should carry a message every `expectedIntervalSeconds` (default 60): a sensor that reports every few seconds, a heartbeat. It works on both kinds of source.
+
+| Status | Rule |
+|---|---|
+| `FRESH` | the newest message is no older than one and a half expected intervals |
+| `STALE` | there is a newest message, and it is older than that |
+| `SILENT` | no message at all: an empty Kafka topic, or an MQTT topic on which nothing was heard |
+
+One and a half intervals, not one: a topic that reports exactly on time would otherwise flip between fresh and stale depending on the moment it is looked at.
+
+- **Kafka**: the broker knows the time of the newest record, so the answer is immediate. Leave `topic` out to check every topic.
+- **MQTT**: the tool listens on a topic filter for `windowSeconds` (default: twice the expected interval plus one, at least 5 and at most 60 seconds). A retained message counts only if its payload says when it was made; its arrival time says nothing.
+
+What listening cannot know: a topic that was already silent before the window started leaves no trace. **Behind a wildcard filter it is simply not listed; name it exactly and it is reported `SILENT`.** The tool says this in its note, and it warns when the window is too short for the expected interval to judge at all.
 
 ### Example
 
@@ -100,12 +122,12 @@ Kafka's own `kafka-consumer-groups.sh --describe`, run a few seconds later, show
 | Tool | What it returns | Status |
 |---|---|---|
 | `list_sources` | the configured brokers and whether each one answers: name, type, address, reachable, detail (what the broker says about itself, or why it could not be reached), response time | Done |
-| `list_topics` | [topic list](#1-topic-list) for one source, with a name filter (`nameContains`) and internal topics on request (`includeInternal`). At most 200 rows, sorted by name | Done for Kafka; MQTT in Phase 6 |
+| `list_topics` | [topic list](#1-topic-list) for one source, with a name filter (`nameContains`). Kafka: internal topics on request (`includeInternal`). MQTT: the filter to listen on (`filter`) and for how long (`windowSeconds`). At most 200 rows, sorted by name | Done |
 | `describe_topic` | one Kafka topic in detail: per partition the leader, replicas, in-sync replicas, start and end offset, messages and time of the newest message; plus the settings that decide how long messages live, and every setting overridden on the topic | Done |
-| `recent_messages` | [recent messages](#2-recent-messages) of one topic, with `limit` and an optional `partition` | Done for Kafka; MQTT in Phase 6 |
+| `recent_messages` | [recent messages](#2-recent-messages) of one topic, with `limit`. Kafka: an optional `partition`. MQTT: `topic` may be a filter, and `windowSeconds` says how long to listen | Done |
 | `list_consumer_groups` | Kafka consumer groups with state (`STABLE`, `EMPTY`, ...) and member count, with a name filter | Done |
 | `consumer_lag` | [lag](#3-lag) of one Kafka consumer group, sampled twice, for all its topics or one (`topic`). Takes at least `sampleSeconds` to answer | Done |
-| `topic_freshness` | [freshness](#3-lag) of Kafka or MQTT topics against an expected interval | Planned |
+| `topic_freshness` | [freshness](#freshness) of Kafka or MQTT topics against an expected interval. For MQTT also the delivery delay and the broker's `$SYS` counters. An MQTT call takes `windowSeconds` to answer | Done |
 
 There is no tool that writes. Every tool is announced to the client as read-only (`readOnlyHint`), and a test checks that for all of them. See [Safety](#safety).
 
@@ -135,6 +157,7 @@ Rules that matter are enforced by a mechanism and a test, not by a sentence in a
 What is in place today: everything except the allow and deny lists and the audit log (Phase 7).
 
 - [`ReadOnlyArchitectureTest`](server/src/test/java/io/topicscope/ReadOnlyArchitectureTest.java) reads the compiled server and fails the build when it calls a broker-client method outside a short allow list of read methods (list, describe, assign, seek, poll, subscribe on MQTT). Each rule is also run against a deliberately bad class, to prove the rule can fail.
+- [`MqttIT`](server/src/test/java/io/topicscope/MqttIT.java) runs every MQTT tool several times and then asks the broker with a client of its own: the retained messages are exactly the seeded ones (nothing was published), and the broker holds no session for a client that is gone.
 - [`KafkaMessagesIT`](server/src/test/java/io/topicscope/KafkaMessagesIT.java) reads every demo topic through `recent_messages` and then asks the broker itself: the set of consumer groups is the same as before, no committed offset has moved, no end offset has moved. It also asks for a topic that does not exist on a broker that creates topics on first use, and checks that the topic was not created.
 - The Kafka consumer is built in one place, with no group, auto-commit off, and topic auto-creation off.
 
@@ -248,7 +271,7 @@ MQTT holds four retained messages, one per sensor: `demo/sensors/<site>/<name>/s
 
 - A position report arrives every 0.5 s. `demo-archiver` keeps up (`OK`). `demo-tracker` reads one record a second, so it **moves and still falls further behind** (`LAGGING`). `demo-reporter` never reads again, so its **lag grows while its committed offset stands still** (`STALLED`). `demo-alarm-notifier` has a backlog of 5 on a topic where nothing happens (`NO_CONSUMER`).
 - Each sensor publishes a reading over MQTT every 2 s to `demo/sensors/<site>/<name>/telemetry`. A bridge copies every reading into `demo.sensors.telemetry` (the MQTT → Kafka path of a typical IoT pipeline).
-- The sensor `rwy-27/rvr` **falls silent after 60 s** (`SIM_SILENT_AFTER_SECONDS`). Its retained status keeps saying "online".
+- The sensor `rwy-27/rvr` **falls silent after 60 s** (`SIM_SILENT_AFTER_SECONDS`). Its retained status keeps saying "online". `topic_freshness` reports the other three `FRESH` and this one `STALE` in a window that covers the moment it stops, `SILENT` afterwards when it is named exactly.
 - `demo.alarms`, `demo.edge-cases`, `demo.empty` and `demo.devices.state` are never written again.
 
 The data set is defined in one place, [`DemoData.java`](simulator/src/main/java/io/topicscope/sim/DemoData.java). The integration test [`SeededStackIT`](simulator/src/test/java/io/topicscope/sim/SeededStackIT.java) starts real brokers and checks every number above, reads records back byte for byte, and checks the live behaviour. The tests of later phases compare the server's answers against the same constants.
@@ -302,7 +325,7 @@ Each phase ends with something that can be run and checked. A phase is done when
 - [x] **Phase 3 — Kafka topic list.** `list_topics`, `describe_topic`. *Check: the result matches the topics the simulator created.* (Checked by `KafkaTopicsIT` against the seeded brokers, by `KafkaOfflinePartitionIT` on a two-broker cluster that loses a broker during the test, and by hand against the compose stack next to Kafka's own `kafka-get-offsets.sh`.)
 - [x] **Phase 4 — Kafka recent messages.** `recent_messages` with positional reads, value formatting, caps and redaction. *Check: the last N records match what was published, and no consumer group appears on the broker afterwards.* (Checked by `KafkaMessagesIT` against the seeded brokers, and by hand against the compose stack with live traffic.)
 - [x] **Phase 5 — Kafka lag.** `list_consumer_groups`, `consumer_lag` with two samples and a status. *Check: the slow consumer is reported as `LAGGING`, a stopped one as `STALLED`.* (Checked by `KafkaLagIT`: exact numbers on the seeded brokers, the statuses on brokers with live traffic; and by hand against the compose stack next to Kafka's own `kafka-consumer-groups.sh`.)
-- [ ] **Phase 6 — MQTT.** Observation-window topic list, retained and live messages, `topic_freshness`. *Check: a sensor that the simulator silences turns `STALE`.*
+- [x] **Phase 6 — MQTT.** Observation-window topic list, retained and live messages, `topic_freshness`. *Check: a sensor that the simulator silences turns `STALE`.* (Checked by `MqttIT`: a window that covers the moment the sensor stops reports it `STALE`; afterwards it is `SILENT` when named exactly. And by hand against the compose stack.)
 - [ ] **Phase 7 — Safety hardening.** Allow and deny lists, audit log, timeouts, a read-only broker account in the local stack. *Check: a publish attempt with the server's account is refused by the broker itself.*
 - [ ] **Phase 8 — Web status board (optional).** A small React page that shows the three views and updates over a WebSocket. *Check: stopping the slow consumer changes the board without a reload.*
 - [ ] **Phase 9 — Release.** Docker image, HTTP transport, usage guide in English and Korean, screenshots, `CHANGELOG.md`, `SECURITY.md`, v0.1.0.

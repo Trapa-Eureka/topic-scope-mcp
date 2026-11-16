@@ -42,12 +42,14 @@ class MessageServiceTest {
   final PretendCluster cluster = new PretendCluster().topic("orders", false,
       healthy(0, 0, 10, ONE_MINUTE_AGO), healthy(1, 0, 10, ONE_MINUTE_AGO), healthy(2, 0, 10, ONE_MINUTE_AGO));
   final PretendReader reader = new PretendReader();
+  final PretendMqtt mqtt = new PretendMqtt();
 
   MessageService service(Limits limits) {
     TopicScopeProperties properties = new TopicScopeProperties(List.of(
         new Source("k", SourceType.KAFKA, "kafka:9092"), new Source("m", SourceType.MQTT, "tcp://mqtt:1883")), null, null, limits);
     Sources sources = new Sources(properties);
-    return new MessageService(sources, new TopicService(sources, cluster, properties, Clock.systemUTC()), reader, properties);
+    MqttService mqttService = new MqttService(sources, mqtt, properties);
+    return new MessageService(sources, new TopicService(sources, cluster, mqttService, properties, Clock.systemUTC()), reader, mqttService, properties);
   }
 
   MessageService service() {
@@ -66,16 +68,16 @@ class MessageServiceTest {
   void aRecordBecomesARowWithEveryPartFormatted() {
     reader.records.add(record(1, 42, "d0a001", "{ \"seq\": 7 }", new RawHeader("schema", bytes("alarm.v1")), new RawHeader("empty", null)));
 
-    MessageService.MessageList list = service().recentMessages("k", " orders ", null, null);
+    MessageService.MessageList list = service().recentMessages("k", " orders ", null, null, null);
 
     assertThat(list.source()).isEqualTo("k");
     assertThat(list.topic()).isEqualTo("orders");
     assertThat(list.limit()).isEqualTo(10);
     assertThat(list.returned()).isEqualTo(1);
     assertThat(list.note()).isEmpty();
-    assertThat(list.messages()).containsExactly(new MessageService.MessageRow(1, 42, "2026-11-16T12:00:00.123Z", "d0a001",
+    assertThat(list.messages()).containsExactly(new MessageService.MessageRow("orders", 1, 42, "2026-11-16T12:00:00.123Z", "d0a001",
         List.of(new MessageService.HeaderRow("schema", "alarm.v1"), new MessageService.HeaderRow("empty", "")),
-        "{\"seq\":7}", "json", 12, false, false));
+        "{\"seq\":7}", "json", 12, false, false, -1, false));
     assertThat(reader.askedPartitions).containsExactly(0, 1, 2);
     assertThat(reader.askedLimit).isEqualTo(10);
   }
@@ -87,7 +89,7 @@ class MessageServiceTest {
     reader.records.add(record(0, 3, "plain", "{\"token\":\"abc\"}"));
     reader.records.add(record(0, 4, "plain", "ok", new RawHeader("trace", bytes("id-1"))));
 
-    List<MessageService.MessageRow> rows = service().recentMessages("k", "orders", null, null).messages();
+    List<MessageService.MessageRow> rows = service().recentMessages("k", "orders", null, null, null).messages();
 
     assertThat(rows.get(0).headers()).containsExactly(new MessageService.HeaderRow("Authorization", "[REDACTED]"));
     assertThat(rows.get(1).key()).isEqualTo("password=[REDACTED]");
@@ -98,7 +100,7 @@ class MessageServiceTest {
   @Test
   void aRecordWithoutKeyOrValueIsShownAsSuch() {
     reader.records.add(record(0, 5, null, null));
-    MessageService.MessageRow row = service().recentMessages("k", "orders", null, null).messages().get(0);
+    MessageService.MessageRow row = service().recentMessages("k", "orders", null, null, null).messages().get(0);
     assertThat(row.key()).isEmpty();
     assertThat(row.value()).isEmpty();
     assertThat(row.valueFormat()).isEqualTo("none");
@@ -107,29 +109,29 @@ class MessageServiceTest {
 
   @Test
   void theLimitHasADefaultAFloorAndACeiling() {
-    assertThat(service().recentMessages("k", "orders", 3, null).limit()).isEqualTo(3);
+    assertThat(service().recentMessages("k", "orders", 3, null, null).limit()).isEqualTo(3);
 
-    MessageService.MessageList capped = service().recentMessages("k", "orders", 5000, null);
+    MessageService.MessageList capped = service().recentMessages("k", "orders", 5000, null, null);
     assertThat(capped.limit()).isEqualTo(100);
     assertThat(reader.askedLimit).isEqualTo(100);
     assertThat(capped.note()).startsWith("'limit' was lowered from 5000 to 100");
 
-    assertThat(service(new Limits(5, null, null)).recentMessages("k", "orders", 6, null).limit()).isEqualTo(5);
-    assertThat(problem(() -> service().recentMessages("k", "orders", 0, null)))
+    assertThat(service(new Limits(5, null, null)).recentMessages("k", "orders", 6, null, null).limit()).isEqualTo(5);
+    assertThat(problem(() -> service().recentMessages("k", "orders", 0, null, null)))
         .isEqualTo("'limit' must be at least 1, and it was 0. Leave it out for the default of 10.");
   }
 
   @Test
   void onePartitionCanBeAskedForAndMustExist() {
-    service().recentMessages("k", "orders", null, 2);
+    service().recentMessages("k", "orders", null, 2, null);
     assertThat(reader.askedPartitions).containsExactly(2);
 
-    assertThat(problem(() -> service().recentMessages("k", "orders", null, 3)))
+    assertThat(problem(() -> service().recentMessages("k", "orders", null, 3, null)))
         .isEqualTo("Topic 'orders' has no partition 3. Its partitions are 0 to 2.");
-    assertThat(problem(() -> service().recentMessages("k", "orders", null, -1))).contains("has no partition -1");
+    assertThat(problem(() -> service().recentMessages("k", "orders", null, -1, null))).contains("has no partition -1");
 
     cluster.topic("single", false, healthy(0, 0, 1, ONE_MINUTE_AGO));
-    assertThat(problem(() -> service().recentMessages("k", "single", null, 1))).endsWith("Its only partition is 0.");
+    assertThat(problem(() -> service().recentMessages("k", "single", null, 1, null))).endsWith("Its only partition is 0.");
   }
 
   @Test
@@ -138,21 +140,21 @@ class MessageServiceTest {
         new KafkaTopicReader.PartitionInfo(1, -1, List.of(2), List.of(), -1, -1, -1));
     reader.records.add(record(0, 4, "k", "v"));
 
-    MessageService.MessageList list = service().recentMessages("k", "broken", null, null);
+    MessageService.MessageList list = service().recentMessages("k", "broken", null, null, null);
     assertThat(reader.askedPartitions).containsExactly(0);
     assertThat(list.note()).isEqualTo("Partition(s) [1] have no leader and were not read; their newest messages are missing from this list.");
 
-    assertThat(problem(() -> service().recentMessages("k", "broken", null, 1)))
+    assertThat(problem(() -> service().recentMessages("k", "broken", null, 1, null)))
         .isEqualTo("Partition 1 of topic 'broken' has no leader, so it cannot be read right now. Call describe_topic to see the state of every partition.");
   }
 
   @Test
   void anEmptyTopicAndAnUnfinishedReadAreSaid() {
-    assertThat(service().recentMessages("k", "orders", null, null).note()).isEqualTo("The topic holds no messages.");
-    assertThat(service().recentMessages("k", "orders", null, 1).note()).isEqualTo("Partition 1 holds no messages.");
+    assertThat(service().recentMessages("k", "orders", null, null, null).note()).isEqualTo("The topic holds no messages.");
+    assertThat(service().recentMessages("k", "orders", null, 1, null).note()).isEqualTo("Partition 1 holds no messages.");
 
     reader.complete = false;
-    assertThat(service().recentMessages("k", "orders", null, null).note()).startsWith("Reading stopped at the time limit").doesNotContain("holds no messages");
+    assertThat(service().recentMessages("k", "orders", null, null, null).note()).startsWith("Reading stopped at the time limit").doesNotContain("holds no messages");
   }
 
   @Test
@@ -160,7 +162,7 @@ class MessageServiceTest {
     for (int i = 0; i < 6; i++) reader.records.add(record(0, 10 - i, "k", "v".repeat(1000)));
 
     // 300 characters per value, 700 for the whole answer: the budget is used up after the third row.
-    MessageService.MessageList list = service(new Limits(null, 300, 700)).recentMessages("k", "orders", null, null);
+    MessageService.MessageList list = service(new Limits(null, 300, 700)).recentMessages("k", "orders", null, null, null);
 
     assertThat(list.messages()).allSatisfy(row -> {
       assertThat(row.truncated()).isTrue();
@@ -174,15 +176,10 @@ class MessageServiceTest {
   }
 
   @Test
-  void wrongNamesAndMqttSources() {
-    assertThat(problem(() -> service().recentMessages("k", "order", null, null)))
+  void wrongNames() {
+    assertThat(problem(() -> service().recentMessages("k", "order", null, null, null)))
         .isEqualTo("There is no topic named 'order' on source 'k'. Did you mean: orders.");
-    assertThat(problem(() -> service().recentMessages("k", " ", null, null))).startsWith("The 'topic' argument is missing.");
-    assertThat(problem(() -> service().recentMessages("nope", "orders", null, null))).startsWith("There is no source named 'nope'.");
-
-    MessageService.MessageList mqtt = service().recentMessages("m", "demo/sensors/#", null, null);
-    assertThat(mqtt.type()).isEqualTo("MQTT");
-    assertThat(mqtt.messages()).isEmpty();
-    assertThat(mqtt.note()).contains("not available yet");
+    assertThat(problem(() -> service().recentMessages("k", " ", null, null, null))).startsWith("The 'topic' argument is missing.");
+    assertThat(problem(() -> service().recentMessages("nope", "orders", null, null, null))).startsWith("There is no source named 'nope'.");
   }
 }

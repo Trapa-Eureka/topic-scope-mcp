@@ -206,9 +206,6 @@ class KafkaMessagesIT {
     assertThat(number(capped.get("limit"))).isEqualTo(100);
     assertThat(messages(capped)).hasSize(100);
     assertThat((String) capped.get("note")).contains("'limit' was lowered from 100000 to 100");
-
-    Map<String, Object> mqtt = call(client, "recent_messages", Map.of("source", "local-mqtt", "topic", "demo/sensors/#"));
-    assertThat((String) mqtt.get("note")).contains("not available yet");
   }
 
   // ---------- helpers ----------

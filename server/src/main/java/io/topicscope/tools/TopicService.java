@@ -10,6 +10,7 @@ import io.topicscope.kafka.KafkaTopicReader.TopicName;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,12 +41,27 @@ public class TopicService {
                          String newestMessageTime, long newestMessageAgeSeconds, int underReplicatedPartitions, int offlinePartitions) {}
 
   /**
-   * The result of {@code list_topics}.
+   * One topic heard on an MQTT source. An MQTT broker keeps no catalog, so this is an observation, not a fact
+   * about the broker.
    *
-   * @param matching topics that match the filter; {@code topics} holds at most the first 200 of them by name
+   * @param messages messages published during the listening window (the retained message is not counted)
+   * @param retained whether the broker holds a retained message for the topic
+   * @param qos the highest quality of service seen on it: 0, 1 or 2
+   * @param lastMessageTime arrival of the newest message published during the window, ISO-8601 in UTC; empty
+   *     when only the retained message was seen
+   */
+  public record ObservedTopic(String topic, int messages, boolean retained, int qos, String lastMessageTime) {}
+
+  /**
+   * The result of {@code list_topics}. A Kafka source fills {@code topics}, an MQTT source fills {@code observed};
+   * the other list is empty.
+   *
+   * @param matching topics that match the filter; the lists hold at most the first 200 of them by name
+   * @param windowSeconds how long an MQTT source was listened to; 0 for a Kafka source
    * @param note anything the reader must know to read the list correctly; empty when there is nothing
    */
-  public record TopicList(String source, String type, List<TopicRow> topics, int matching, int shown, String note) {}
+  public record TopicList(String source, String type, List<TopicRow> topics, List<ObservedTopic> observed, int matching, int shown,
+                          double windowSeconds, String note) {}
 
   /** One partition of {@code describe_topic}. Offsets and the leader are -1 when the partition is offline. */
   public record PartitionRow(int partition, int leader, List<Integer> replicas, List<Integer> inSyncReplicas,
@@ -59,28 +75,31 @@ public class TopicService {
 
   private final Sources sources;
   private final KafkaTopicReader kafka;
+  private final MqttService mqtt;
   private final TopicScopeProperties properties;
   private final Clock clock;
 
   @Autowired
-  public TopicService(Sources sources, KafkaTopicReader kafka, TopicScopeProperties properties) {
-    this(sources, kafka, properties, Clock.systemUTC());
+  public TopicService(Sources sources, KafkaTopicReader kafka, MqttService mqtt, TopicScopeProperties properties) {
+    this(sources, kafka, mqtt, properties, Clock.systemUTC());
   }
 
-  TopicService(Sources sources, KafkaTopicReader kafka, TopicScopeProperties properties, Clock clock) {
+  TopicService(Sources sources, KafkaTopicReader kafka, MqttService mqtt, TopicScopeProperties properties, Clock clock) {
     this.sources = sources;
     this.kafka = kafka;
+    this.mqtt = mqtt;
     this.properties = properties;
     this.clock = clock;
   }
 
-  public TopicList listTopics(String sourceName, String nameContains, Boolean includeInternal) {
+  /**
+   * @param mqttFilter MQTT only: the topic filter to listen on; all topics when null
+   * @param windowSeconds MQTT only: how long to listen
+   */
+  public TopicList listTopics(String sourceName, String nameContains, Boolean includeInternal, String mqttFilter, Integer windowSeconds) {
     Source source = sources.require(sourceName);
-    if (source.type() == SourceType.MQTT) {
-      return new TopicList(source.name(), source.type().name(), List.of(), 0, 0,
-          "Listing topics of an MQTT source is not available yet. Only Kafka sources can be listed for now.");
-    }
     String filter = nameContains == null ? "" : nameContains.trim().toLowerCase(Locale.ROOT);
+    if (source.type() == SourceType.MQTT) return observeTopics(source, filter, mqttFilter, windowSeconds);
     boolean internalToo = Boolean.TRUE.equals(includeInternal);
 
     return sources.ask(source, () -> {
@@ -99,8 +118,31 @@ public class TopicService {
       } else if (matching.isEmpty()) {
         note = filter.isEmpty() ? "This cluster has no topics." : "No topic name contains '" + filter + "'.";
       }
-      return new TopicList(source.name(), source.type().name(), rows, matching.size(), rows.size(), note);
+      return new TopicList(source.name(), source.type().name(), rows, List.of(), matching.size(), rows.size(), 0, note);
     });
+  }
+
+  /** The MQTT form of the topic list: what was heard while listening, because there is nothing to look up. */
+  private TopicList observeTopics(Source source, String nameFilter, String mqttFilter, Integer windowSeconds) {
+    String topicFilter = MqttService.filter(mqttFilter);
+    int seconds = MqttService.windowSeconds(windowSeconds, MqttService.DEFAULT_WINDOW_SECONDS, MqttService.MAX_WINDOW_SECONDS);
+    MqttService.Heard heard = mqtt.listen(source, topicFilter, seconds, 0, false);
+
+    List<ObservedTopic> matching = heard.topics().stream()
+        .filter(t -> nameFilter.isEmpty() || t.topic().toLowerCase(Locale.ROOT).contains(nameFilter))
+        .map(t -> new ObservedTopic(t.topic(), t.messages(), t.retained(), t.qos(), time(t.lastLiveAtMillis())))
+        .toList();
+    List<ObservedTopic> shown = matching.stream().limit(MAX_TOPICS).toList();
+
+    List<String> notes = new ArrayList<>();
+    notes.add("An MQTT broker keeps no list of topics. These are the topics heard on the filter '" + topicFilter + "' during "
+        + heard.window().seconds() + " s, plus the topics that hold a retained message. A topic that published nothing in that time "
+        + "and has no retained message is not shown.");
+    if (topicFilter.equals(MqttService.ALL_TOPICS)) notes.add("'#' does not match topics that start with '$', such as $SYS.");
+    if (matching.size() > shown.size()) {
+      notes.add("Showing the first " + shown.size() + " of " + matching.size() + " topics by name. Narrow it down with filter or nameContains.");
+    }
+    return new TopicList(source.name(), source.type().name(), List.of(), shown, matching.size(), shown.size(), heard.window().seconds(), String.join(" ", notes));
   }
 
   public TopicDetail describeTopic(String sourceName, String topic) {

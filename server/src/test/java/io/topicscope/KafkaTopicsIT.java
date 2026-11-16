@@ -156,14 +156,6 @@ class KafkaTopicsIT {
   }
 
   @Test
-  void anMqttSourceSaysThatItCannotBeListedYet() {
-    Map<String, Object> result = call(client, "list_topics", Map.of("source", "local-mqtt"));
-    assertThat(result).containsEntry("type", "MQTT");
-    assertThat(names(result)).isEmpty();
-    assertThat((String) result.get("note")).contains("not available yet");
-  }
-
-  @Test
   void aKafkaSourceThatIsDownIsAProblemWithAReasonNotASilentHang() {
     try (McpSyncClient lonely = connect("127.0.0.1:1", McpTestSupport.MQTT_ADDRESS)) {
       long start = System.nanoTime();
