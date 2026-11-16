@@ -83,7 +83,7 @@ class HttpIT {
     try (McpSyncClient client = McpClient.sync(transport).requestTimeout(Duration.ofSeconds(60)).build()) {
       McpSchema.InitializeResult hello = client.initialize();
       assertThat(hello.serverInfo().name()).isEqualTo("topic-scope");
-      assertThat(hello.serverInfo().version()).isEqualTo("0.1.0");
+      assertThat(hello.serverInfo().version()).isEqualTo("0.1.1");
 
       assertThat(client.listTools().tools()).extracting(McpSchema.Tool::name).containsExactlyInAnyOrder(
           "list_sources", "list_topics", "describe_topic", "recent_messages", "list_consumer_groups", "consumer_lag", "topic_freshness");

@@ -22,8 +22,8 @@ jar를 실행하려면 Java 21이, 이미지를 실행하려면 Docker가 필요
 git clone https://github.com/Trapa-Eureka/topic-scope-mcp.git
 cd topic-scope-mcp
 
-./mvnw -DskipTests install                 # jar: server/target/topic-scope-server-0.1.0.jar (첫 실행 이후에는 몇 초)
-docker build -t topic-scope-mcp:0.1.0 .    # 또는 이미지 (처음에는 몇 분)
+./mvnw -DskipTests install                 # jar: server/target/topic-scope-server-0.1.1.jar (첫 실행 이후에는 몇 초)
+docker build -t topic-scope-mcp:0.1.1 .    # 또는 이미지 (처음에는 몇 분)
 ```
 
 두 MCP 모드는 jar만 있으면 됩니다. jar로 상태판을 띄우려면 화면도 한 번 빌드해야 합니다: `(cd board && npm ci && npm run build)` (Node.js 20 이상). 이미지에는 이미 들어 있습니다.
@@ -53,7 +53,7 @@ docker compose up -d --build --wait
   "mcpServers": {
     "topic-scope": {
       "command": "java",
-      "args": ["-jar", "/absolute/path/to/topic-scope-server-0.1.0.jar"],
+      "args": ["-jar", "/absolute/path/to/topic-scope-server-0.1.1.jar"],
       "env": {
         "TOPIC_SCOPE_KAFKA": "localhost:9092",
         "TOPIC_SCOPE_KAFKA_USERNAME": "topicscope",
@@ -79,7 +79,7 @@ docker compose up -d --build --wait
       "args": ["run", "-i", "--rm", "--network", "topic-scope_default",
                "-e", "TOPIC_SCOPE_KAFKA=kafka:19092", "-e", "TOPIC_SCOPE_KAFKA_USERNAME=topicscope", "-e", "TOPIC_SCOPE_KAFKA_PASSWORD=topicscope-local-only",
                "-e", "TOPIC_SCOPE_MQTT=tcp://mosquitto:1883", "-e", "TOPIC_SCOPE_MQTT_USERNAME=topicscope", "-e", "TOPIC_SCOPE_MQTT_PASSWORD=topicscope-local-only",
-               "topic-scope-mcp:0.1.0"]
+               "topic-scope-mcp:0.1.1"]
     }
   }
 }
@@ -99,7 +99,7 @@ docker compose up -d --build --wait
 
 ```bash
 export TOPIC_SCOPE_HTTP_TOKEN=$(openssl rand -hex 24)     # 24자 이상. 비밀번호처럼 다룹니다
-java -jar server/target/topic-scope-server-0.1.0.jar --spring.profiles.active=http
+java -jar server/target/topic-scope-server-0.1.1.jar --spring.profiles.active=http
 ```
 
 클라이언트는 모든 요청에 `Authorization: Bearer <토큰>`을 보냅니다. 없거나 틀리면 401로 응답합니다. 웹 페이지에서 온 요청(`Origin` 헤더가 있는 요청)은 그 출처가 `TOPIC_SCOPE_HTTP_ALLOWED_ORIGINS`에 없으면 403으로 거부합니다.
@@ -131,7 +131,7 @@ docker run -d --rm --network topic-scope_default -p 127.0.0.1:8091:8091 \
   -e TOPIC_SCOPE_HTTP_TOKEN -e TOPIC_SCOPE_KAFKA=kafka:19092 -e TOPIC_SCOPE_MQTT=tcp://mosquitto:1883 \
   -e TOPIC_SCOPE_KAFKA_USERNAME=topicscope -e TOPIC_SCOPE_KAFKA_PASSWORD=topicscope-local-only \
   -e TOPIC_SCOPE_MQTT_USERNAME=topicscope -e TOPIC_SCOPE_MQTT_PASSWORD=topicscope-local-only \
-  topic-scope-mcp:0.1.0 --spring.profiles.active=http
+  topic-scope-mcp:0.1.1 --spring.profiles.active=http
 ```
 
 | 변수 | 기본값 | 의미 |
@@ -161,7 +161,7 @@ docker compose --profile board up -d --build --wait       # 로컬 스택과 상
 ```bash
 TOPIC_SCOPE_KAFKA_USERNAME=topicscope TOPIC_SCOPE_KAFKA_PASSWORD=topicscope-local-only \
 TOPIC_SCOPE_MQTT_USERNAME=topicscope TOPIC_SCOPE_MQTT_PASSWORD=topicscope-local-only \
-  java -jar server/target/topic-scope-server-0.1.0.jar --spring.profiles.active=board
+  java -jar server/target/topic-scope-server-0.1.1.jar --spring.profiles.active=board
 ```
 
 그다음 http://127.0.0.1:8090 을 엽니다.
@@ -209,7 +209,7 @@ docker compose exec -T mosquitto mosquitto_pub -h localhost -u simulator -P simu
 기본 소스 두 개는 환경 변수(`TOPIC_SCOPE_KAFKA`, `TOPIC_SCOPE_MQTT`와 각각의 `_USERNAME` / `_PASSWORD`)로 바꿉니다. 다른 이름, 더 많은 브로커, TLS, 토픽 규칙이 필요하면 파일을 만들어 넘깁니다.
 
 ```bash
-java -jar topic-scope-server-0.1.0.jar --spring.config.additional-location=file:/etc/topic-scope/sources.yml
+java -jar topic-scope-server-0.1.1.jar --spring.config.additional-location=file:/etc/topic-scope/sources.yml
 ```
 
 ```yaml

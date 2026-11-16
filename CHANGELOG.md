@@ -6,6 +6,10 @@ Until 1.0.0 the names of tools, arguments, result fields and settings may still 
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-17
+
+Three things found by using 0.1.0 for real, and a walkthrough. Nothing was removed; one tool result gained two fields.
+
 ### Added
 
 - `list_sources` returns `currentTimeUtc` and a `note` saying that every time in every result is UTC. Found by using it: an assistant in a time zone that was already on the next calendar day read correct UTC timestamps as "the broker's clock is a day off". The server's instructions say the same.
@@ -16,10 +20,10 @@ Until 1.0.0 the names of tools, arguments, result fields and settings may still 
 - Status board: selecting an MQTT topic showed "No messages" for a sensor that reports every two seconds, because the board listened for one second. It now shows what it has heard on the topic since it started.
 - Status board: after the server restarted, every consumer group card recorded a change "to MEASURING". That is the server not knowing yet, not a change of the group, and it is no longer recorded.
 
-### Changed
+### Documentation
 
-- Documentation only: HTTP mode has now been tried with Claude Code 2.1.325 as the client (connected, seven tools, three tool calls answered; refused with a wrong token). The usage guide shows the configuration. The 0.1.0 notes below still say it had not been tried, which was true when 0.1.0 was released.
-- Documentation only: the Docker image has now been tried as an MCP server started by Claude Code 2.1.325 over stdin/stdout, with the configuration from the usage guide. The guide also says how to keep such a container's audit log.
+- HTTP mode has now been tried with Claude Code 2.1.325 as the client (connected, seven tools, three tool calls answered; refused with a wrong token). The usage guide shows the configuration. The 0.1.0 notes below still say it had not been tried, which was true when 0.1.0 was released.
+- The Docker image has now been tried as an MCP server started by Claude Code 2.1.325 over stdin/stdout, with the configuration from the usage guide. The guide also says how to keep such a container's audit log.
 
 ## [0.1.0] - 2026-11-16
 
@@ -65,4 +69,6 @@ The first release. A read-only MCP server that lets an AI assistant look inside 
 - Only Claude Code has been tried as an MCP client, over stdin/stdout.
 - No download yet: the jar and the image are built from source.
 
+[Unreleased]: https://github.com/Trapa-Eureka/topic-scope-mcp/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/Trapa-Eureka/topic-scope-mcp/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Trapa-Eureka/topic-scope-mcp/releases/tag/v0.1.0

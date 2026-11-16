@@ -15,7 +15,7 @@ docker compose up -d --build --wait            # the local stack, see the local-
 (cd board && npm ci && npm run build)          # the page, into board/dist
 TOPIC_SCOPE_KAFKA_USERNAME=topicscope TOPIC_SCOPE_KAFKA_PASSWORD=topicscope-local-only \
 TOPIC_SCOPE_MQTT_USERNAME=topicscope TOPIC_SCOPE_MQTT_PASSWORD=topicscope-local-only \
-  java -jar server/target/topic-scope-server-0.1.0.jar --spring.profiles.active=board
+  java -jar server/target/topic-scope-server-0.1.1.jar --spring.profiles.active=board
 ```
 
 Then http://127.0.0.1:8090. Start it from the repository root: the page is served from `board/dist` relative to the working directory (`TOPIC_SCOPE_BOARD_FILES` changes that). `GET /` answering 404 means the page was not built. Other settings: `TOPIC_SCOPE_BOARD_PORT` (8090), `TOPIC_SCOPE_BOARD_INTERVAL` (5s).

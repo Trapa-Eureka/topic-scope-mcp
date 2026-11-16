@@ -2,7 +2,7 @@
 
 A **read-only** MCP server that lets an AI assistant look inside Kafka and MQTT brokers: which topics exist, what the latest messages are, and whether consumers are keeping up.
 
-> **Status: version 0.1.0.** Everything described here works and is tested, against Apache Kafka and Mosquitto in Docker. It is a first release by one person: read [Known limitations](#known-limitations) before pointing it at a system that matters. There is no download yet; the jar and the Docker image are built from source.
+> **Status: version 0.1.1.** Everything described here works and is tested, against Apache Kafka and Mosquitto in Docker. It is an early release by one person: read [Known limitations](#known-limitations) before pointing it at a system that matters. There is no download yet; the jar and the Docker image are built from source.
 
 **Jump to:** [Quick start](#quick-start) · [**Walkthrough**](docs/walkthrough.md) ([한국어](docs/walkthrough.ko.md)) · [**Usage**](docs/usage.md) ([한국어](docs/usage.ko.md)) · [What it shows](#what-it-shows) · [Tools](#tools) · [Status board](#status-board) · [Safety](#safety) · [Installation](#installation)
 
@@ -184,7 +184,7 @@ Because the board looks again and again, it knows two things a single tool call 
 (cd board && npm ci && npm run build)          # builds the page into board/dist (Node.js 20 or newer)
 TOPIC_SCOPE_KAFKA_USERNAME=topicscope TOPIC_SCOPE_KAFKA_PASSWORD=topicscope-local-only \
 TOPIC_SCOPE_MQTT_USERNAME=topicscope TOPIC_SCOPE_MQTT_PASSWORD=topicscope-local-only \
-  java -jar server/target/topic-scope-server-0.1.0.jar --spring.profiles.active=board
+  java -jar server/target/topic-scope-server-0.1.1.jar --spring.profiles.active=board
 ```
 
 Then open http://127.0.0.1:8090. Run it from the repository folder, after the two commands under [Installation](#installation). To see a status change live on the local stack:
@@ -258,8 +258,8 @@ Nothing is published to a registry yet. Build the jar, the Docker image, or both
 ```bash
 git clone https://github.com/Trapa-Eureka/topic-scope-mcp.git
 cd topic-scope-mcp
-./mvnw -DskipTests install                 # server/target/topic-scope-server-0.1.0.jar; a few seconds after the first run
-docker build -t topic-scope-mcp:0.1.0 .    # the image, with the status board's page inside; several minutes the first time
+./mvnw -DskipTests install                 # server/target/topic-scope-server-0.1.1.jar; a few seconds after the first run
+docker build -t topic-scope-mcp:0.1.1 .    # the image, with the status board's page inside; several minutes the first time
 docker compose up -d --build --wait        # Kafka on localhost:9092, Mosquitto on localhost:1883, demo data, sample traffic
 ```
 
@@ -279,7 +279,7 @@ The server speaks MCP over stdin/stdout: the client starts it as a child process
 
 ```
 command: java
-args:    -jar /absolute/path/to/topic-scope-mcp/server/target/topic-scope-server-0.1.0.jar
+args:    -jar /absolute/path/to/topic-scope-mcp/server/target/topic-scope-server-0.1.1.jar
 ```
 
 For Claude Code, the repository ships a project-level [`.mcp.json`](.mcp.json) with exactly this plus the local stack's look-only login (relative path, so start Claude Code in the repository folder and approve the server when asked). Then ask "which brokers can you see?".

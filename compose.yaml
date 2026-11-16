@@ -110,7 +110,7 @@ services:
   #   docker compose --profile board up -d --build --wait      then open http://127.0.0.1:8090
   board:
     profiles: ["board"]
-    image: topic-scope-mcp:0.1.0
+    image: topic-scope-mcp:0.1.1
     build:
       context: .
       dockerfile: Dockerfile

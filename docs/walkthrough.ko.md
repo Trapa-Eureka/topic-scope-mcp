@@ -63,7 +63,7 @@ docker compose logs simulator
 ./mvnw -DskipTests install
 ```
 
-`server/target/topic-scope-server-0.1.0.jar`가 만들어집니다. 처음에는 의존성을 내려받습니다.
+`server/target/topic-scope-server-0.1.1.jar`가 만들어집니다. 처음에는 의존성을 내려받습니다.
 
 ## 3. Claude Code 연결
 

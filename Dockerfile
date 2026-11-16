@@ -1,6 +1,6 @@
 # The Topic Scope server as one image: MCP over stdin/stdout (the default), MCP over HTTP, or the status board.
 #
-#   docker build -t topic-scope-mcp:0.1.0 .
+#   docker build -t topic-scope-mcp:0.1.1 .
 #
 # How to run each mode is in docs/usage.md. Build context is the repository root.
 

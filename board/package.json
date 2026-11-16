@@ -1,7 +1,7 @@
 {
   "name": "topic-scope-board",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "The web status board of Topic Scope: a read-only page fed over a WebSocket by the server in board mode.",
   "scripts": {

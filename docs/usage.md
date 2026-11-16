@@ -22,8 +22,8 @@ You need Java 21 to run the jar, or Docker to run the image. There is no downloa
 git clone https://github.com/Trapa-Eureka/topic-scope-mcp.git
 cd topic-scope-mcp
 
-./mvnw -DskipTests install                 # the jar: server/target/topic-scope-server-0.1.0.jar (a few seconds after the first run)
-docker build -t topic-scope-mcp:0.1.0 .    # or the image (several minutes the first time)
+./mvnw -DskipTests install                 # the jar: server/target/topic-scope-server-0.1.1.jar (a few seconds after the first run)
+docker build -t topic-scope-mcp:0.1.1 .    # or the image (several minutes the first time)
 ```
 
 The jar needs nothing else for the two MCP modes. For the status board from the jar, build the page once as well: `(cd board && npm ci && npm run build)` (Node.js 20 or newer). The image already contains it.
@@ -53,7 +53,7 @@ For another project, or other brokers, put the same into that project's `.mcp.js
   "mcpServers": {
     "topic-scope": {
       "command": "java",
-      "args": ["-jar", "/absolute/path/to/topic-scope-server-0.1.0.jar"],
+      "args": ["-jar", "/absolute/path/to/topic-scope-server-0.1.1.jar"],
       "env": {
         "TOPIC_SCOPE_KAFKA": "localhost:9092",
         "TOPIC_SCOPE_KAFKA_USERNAME": "topicscope",
@@ -79,7 +79,7 @@ The same, with Docker as the command. `-i` is required: without it the server ha
       "args": ["run", "-i", "--rm", "--network", "topic-scope_default",
                "-e", "TOPIC_SCOPE_KAFKA=kafka:19092", "-e", "TOPIC_SCOPE_KAFKA_USERNAME=topicscope", "-e", "TOPIC_SCOPE_KAFKA_PASSWORD=topicscope-local-only",
                "-e", "TOPIC_SCOPE_MQTT=tcp://mosquitto:1883", "-e", "TOPIC_SCOPE_MQTT_USERNAME=topicscope", "-e", "TOPIC_SCOPE_MQTT_PASSWORD=topicscope-local-only",
-               "topic-scope-mcp:0.1.0"]
+               "topic-scope-mcp:0.1.1"]
     }
   }
 }
@@ -99,7 +99,7 @@ The same tools at `http://<host>:8091/mcp` (Streamable HTTP). An HTTP endpoint t
 
 ```bash
 export TOPIC_SCOPE_HTTP_TOKEN=$(openssl rand -hex 24)     # at least 24 characters; keep it like a password
-java -jar server/target/topic-scope-server-0.1.0.jar --spring.profiles.active=http
+java -jar server/target/topic-scope-server-0.1.1.jar --spring.profiles.active=http
 ```
 
 A client sends `Authorization: Bearer <token>` with every request. Without it, or with a wrong one, the answer is 401. A request that comes from a web page (it carries an `Origin` header) is refused with 403 unless that origin is listed in `TOPIC_SCOPE_HTTP_ALLOWED_ORIGINS`.
@@ -131,7 +131,7 @@ docker run -d --rm --network topic-scope_default -p 127.0.0.1:8091:8091 \
   -e TOPIC_SCOPE_HTTP_TOKEN -e TOPIC_SCOPE_KAFKA=kafka:19092 -e TOPIC_SCOPE_MQTT=tcp://mosquitto:1883 \
   -e TOPIC_SCOPE_KAFKA_USERNAME=topicscope -e TOPIC_SCOPE_KAFKA_PASSWORD=topicscope-local-only \
   -e TOPIC_SCOPE_MQTT_USERNAME=topicscope -e TOPIC_SCOPE_MQTT_PASSWORD=topicscope-local-only \
-  topic-scope-mcp:0.1.0 --spring.profiles.active=http
+  topic-scope-mcp:0.1.1 --spring.profiles.active=http
 ```
 
 | Variable | Default | Meaning |
@@ -161,7 +161,7 @@ or from the jar, after building the page:
 ```bash
 TOPIC_SCOPE_KAFKA_USERNAME=topicscope TOPIC_SCOPE_KAFKA_PASSWORD=topicscope-local-only \
 TOPIC_SCOPE_MQTT_USERNAME=topicscope TOPIC_SCOPE_MQTT_PASSWORD=topicscope-local-only \
-  java -jar server/target/topic-scope-server-0.1.0.jar --spring.profiles.active=board
+  java -jar server/target/topic-scope-server-0.1.1.jar --spring.profiles.active=board
 ```
 
 Then open http://127.0.0.1:8090.
@@ -209,7 +209,7 @@ What each column means, and the exact rule behind each status, is in the README 
 The two built-in sources are moved with environment variables (`TOPIC_SCOPE_KAFKA`, `TOPIC_SCOPE_MQTT` and their `_USERNAME` / `_PASSWORD`). For other names, more brokers, TLS, or topic rules, write a file and pass it:
 
 ```bash
-java -jar topic-scope-server-0.1.0.jar --spring.config.additional-location=file:/etc/topic-scope/sources.yml
+java -jar topic-scope-server-0.1.1.jar --spring.config.additional-location=file:/etc/topic-scope/sources.yml
 ```
 
 ```yaml

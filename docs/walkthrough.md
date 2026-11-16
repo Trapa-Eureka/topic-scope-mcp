@@ -63,7 +63,7 @@ Both brokers ask for a login. The server logs in as `topicscope`, an account tha
 ./mvnw -DskipTests install
 ```
 
-This makes `server/target/topic-scope-server-0.1.0.jar`. The first run downloads dependencies.
+This makes `server/target/topic-scope-server-0.1.1.jar`. The first run downloads dependencies.
 
 ## 3. Connect Claude Code
 

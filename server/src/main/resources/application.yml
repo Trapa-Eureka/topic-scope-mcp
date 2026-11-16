@@ -10,7 +10,7 @@ spring:
       server:
         stdio: true
         name: topic-scope
-        version: 0.1.0
+        version: 0.1.1
         type: SYNC
         instructions: >-
           Read-only view of Kafka and MQTT brokers: topics, recent messages and lag.
