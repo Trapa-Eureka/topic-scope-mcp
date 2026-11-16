@@ -6,7 +6,7 @@
 
   <groupId>io.topicscope</groupId>
   <artifactId>topic-scope-parent</artifactId>
-  <version>0.1.0-SNAPSHOT</version>
+  <version>0.1.0</version>
   <packaging>pom</packaging>
   <name>Topic Scope MCP</name>
   <description>A read-only MCP server for looking inside Kafka and MQTT brokers.</description>

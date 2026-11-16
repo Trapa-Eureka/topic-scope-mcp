@@ -77,7 +77,7 @@ Brokers from the `local-stack` skill, then:
   '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"hand","version":"0"}}}' \
   '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_sources","arguments":{}}}'; sleep 8 ) \
-  | java -jar server/target/topic-scope-server-0.1.0-SNAPSHOT.jar
+  | java -jar server/target/topic-scope-server-0.1.0.jar
 ```
 
 One JSON line per answer on stdout. The `sleep` keeps stdin open long enough for the answer; the server exits by itself when stdin closes. If a call gets no answer at all, take a thread dump (`jstack <pid>`) and read stderr: look for a `LinkageError`.

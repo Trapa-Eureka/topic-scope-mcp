@@ -13,7 +13,7 @@ spring:
 
 server:
   # This machine only. See BoardWebConfiguration for what else keeps other web pages out.
-  address: 127.0.0.1
+  address: ${TOPIC_SCOPE_BOARD_ADDRESS:127.0.0.1}
   port: ${TOPIC_SCOPE_BOARD_PORT:8090}
 
 topic-scope:

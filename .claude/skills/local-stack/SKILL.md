@@ -18,6 +18,7 @@ Both brokers ask for a login. `simulator` / `simulator-local-only` may do everyt
 | the silent sensor to stop sooner (default 60 s) | add `SIM_SILENT_AFTER_SECONDS=15` in front |
 | to see what the simulator did | `docker compose logs simulator` |
 | an empty start | `docker compose down -v`, then up again |
+| the stack plus the status board in a container (http://127.0.0.1:8090) | `docker compose --profile board up -d --build --wait` |
 | the automated check | `./mvnw verify` (starts its own brokers with Testcontainers; the compose stack need not run) |
 
 Switching from seed to live needs no reset: the simulator sees the seed and only starts the traffic. Going back from live to the exact state does need `docker compose down -v`.

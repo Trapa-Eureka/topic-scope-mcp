@@ -7,7 +7,7 @@
   <parent>
     <groupId>io.topicscope</groupId>
     <artifactId>topic-scope-parent</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
   </parent>
 
   <artifactId>topic-scope-server</artifactId>
@@ -43,6 +43,11 @@
     <dependency>
       <groupId>org.apache.kafka</groupId>
       <artifactId>kafka-clients</artifactId>
+    </dependency>
+    <!-- HTTP mode only (the "http" profile): MCP over Streamable HTTP instead of stdin/stdout. -->
+    <dependency>
+      <groupId>org.springframework.ai</groupId>
+      <artifactId>spring-ai-starter-mcp-server-webmvc</artifactId>
     </dependency>
     <!-- Board mode only (the "board" profile): a local web page fed over a WebSocket. In MCP mode no web server starts. -->
     <dependency>

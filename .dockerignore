@@ -4,6 +4,7 @@
 .vscode
 **/target
 **/node_modules
+board/dist
 docs
 *.md
 .env

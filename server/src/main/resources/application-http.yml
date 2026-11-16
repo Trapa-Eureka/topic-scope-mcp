@@ -1,0 +1,28 @@
+# HTTP mode: java -jar topic-scope-server.jar --spring.profiles.active=http
+# The same tools, served as MCP over Streamable HTTP at /mcp instead of over stdin/stdout. For a client that
+# cannot start the server as a child process, or a server that several people share.
+#
+# An HTTP endpoint that shows what is on the brokers must not be open. This mode refuses to start without
+# TOPIC_SCOPE_HTTP_TOKEN, and every request has to carry it (see HttpAccess).
+
+spring:
+  main:
+    web-application-type: servlet
+  ai:
+    mcp:
+      server:
+        stdio: false
+        protocol: STREAMABLE
+        streamable-http:
+          mcp-endpoint: /mcp
+
+server:
+  # This machine only, unless told otherwise. Anything else is a decision to share the server.
+  address: ${TOPIC_SCOPE_HTTP_ADDRESS:127.0.0.1}
+  port: ${TOPIC_SCOPE_HTTP_PORT:8091}
+
+topic-scope:
+  http:
+    enabled: true
+    token: ${TOPIC_SCOPE_HTTP_TOKEN:}
+    allowed-origins: ${TOPIC_SCOPE_HTTP_ALLOWED_ORIGINS:}

@@ -2,7 +2,8 @@
 #
 #   docker compose up -d --build --wait      seed, then keep sample traffic flowing
 #   SIM_MODE=seed docker compose up -d --build   seed only: the state stays exactly as DemoData.java describes
-#   docker compose down -v                   stop and forget everything
+#   docker compose --profile board up -d --build --wait   the same, plus the status board on http://127.0.0.1:8090
+#   docker compose --profile board down -v   stop and forget everything
 #
 # Every port is published on 127.0.0.1 only. Nothing here is reachable from the network.
 #
@@ -104,3 +105,27 @@ services:
       SIM_SILENT_AFTER_SECONDS: ${SIM_SILENT_AFTER_SECONDS:-60}
     # In seed mode the simulator exits with 0 when it is done; that must not count as a failure.
     restart: "no"
+
+  # The status board, in a container. Not started by default:
+  #   docker compose --profile board up -d --build --wait      then open http://127.0.0.1:8090
+  board:
+    profiles: ["board"]
+    image: topic-scope-mcp:0.1.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["--spring.profiles.active=board"]
+    depends_on:
+      kafka:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+    environment:
+      TOPIC_SCOPE_KAFKA: kafka:19092
+      TOPIC_SCOPE_KAFKA_USERNAME: topicscope
+      TOPIC_SCOPE_KAFKA_PASSWORD: topicscope-local-only
+      TOPIC_SCOPE_MQTT: tcp://mosquitto:1883
+      TOPIC_SCOPE_MQTT_USERNAME: topicscope
+      TOPIC_SCOPE_MQTT_PASSWORD: topicscope-local-only
+    ports:
+      - "127.0.0.1:8090:8090"

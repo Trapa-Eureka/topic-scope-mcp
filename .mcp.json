@@ -2,7 +2,7 @@
   "mcpServers": {
     "topic-scope": {
       "command": "java",
-      "args": ["-jar", "server/target/topic-scope-server-0.1.0-SNAPSHOT.jar"],
+      "args": ["-jar", "server/target/topic-scope-server-0.1.0.jar"],
       "env": {
         "TOPIC_SCOPE_KAFKA_USERNAME": "topicscope",
         "TOPIC_SCOPE_KAFKA_PASSWORD": "topicscope-local-only",

@@ -2,10 +2,31 @@
 
 A **read-only** MCP server that lets an AI assistant look inside Kafka and MQTT brokers: which topics exist, what the latest messages are, and whether consumers are keeping up.
 
-> **Status: Phases 0 to 8 of 9 done. Not released yet: build it from source.**
-> What exists: an MCP server with seven tools (`list_sources`, `list_topics`, `describe_topic`, `recent_messages`, `list_consumer_groups`, `consumer_lag`, `topic_freshness`); a [web status board](#status-board) that shows the same three views live over a WebSocket; logins for brokers that ask for one; topic allow and deny lists; an audit log; a build that fails if server code could change a broker; and a [local stack](#local-stack-and-demo-data) of Kafka and Mosquitto in which the server's account is kept from writing by the brokers themselves. Still to come: a release (Phase 9).
+> **Status: version 0.1.0.** Everything described here works and is tested, against Apache Kafka and Mosquitto in Docker. It is a first release by one person: read [Known limitations](#known-limitations) before pointing it at a system that matters. There is no download yet; the jar and the Docker image are built from source.
 
-**Jump to:** [What it shows](#what-it-shows) · [Tools](#tools) · [Status board](#status-board) · [Safety](#safety) · [Roadmap](#roadmap) · [Installation](#installation)
+**Jump to:** [Quick start](#quick-start) · [**Usage**](docs/usage.md) ([한국어](docs/usage.ko.md)) · [What it shows](#what-it-shows) · [Tools](#tools) · [Status board](#status-board) · [Safety](#safety) · [Installation](#installation)
+
+## Quick start
+
+You need Java 21 and Docker.
+
+```bash
+git clone https://github.com/Trapa-Eureka/topic-scope-mcp.git
+cd topic-scope-mcp
+./mvnw -DskipTests install                 # the server jar
+docker compose up -d --build --wait        # Kafka and Mosquitto with demo data, on this machine only
+```
+
+Start Claude Code in this folder and approve the MCP server `topic-scope` (the repository's `.mcp.json` registers it). Then ask:
+
+- "Which brokers can you see?"
+- "Which topics are on local-kafka, and is anything arriving?"
+- "Is demo-tracker keeping up?"
+- "Are the sensors on local-mqtt still reporting every 2 seconds?"
+
+For the web status board instead: `docker compose --profile board up -d --build --wait`, then open http://127.0.0.1:8090.
+
+Everything else (other clients, HTTP, Docker, your own brokers) is in the [usage guide](docs/usage.md).
 
 ## Overview
 
@@ -163,7 +184,7 @@ Because the board looks again and again, it knows two things a single tool call 
 (cd board && npm ci && npm run build)          # builds the page into board/dist (Node.js 20 or newer)
 TOPIC_SCOPE_KAFKA_USERNAME=topicscope TOPIC_SCOPE_KAFKA_PASSWORD=topicscope-local-only \
 TOPIC_SCOPE_MQTT_USERNAME=topicscope TOPIC_SCOPE_MQTT_PASSWORD=topicscope-local-only \
-  java -jar server/target/topic-scope-server-0.1.0-SNAPSHOT.jar --spring.profiles.active=board
+  java -jar server/target/topic-scope-server-0.1.0.jar --spring.profiles.active=board
 ```
 
 Then open http://127.0.0.1:8090. Run it from the repository folder, after the two commands under [Installation](#installation). To see a status change live on the local stack:
@@ -232,16 +253,25 @@ Maven is not needed. The repository ships the Maven wrapper (`./mvnw`), which do
 
 ## Installation
 
-There is no release yet. Build from source:
+Nothing is published to a registry yet. Build the jar, the Docker image, or both:
 
 ```bash
 git clone https://github.com/Trapa-Eureka/topic-scope-mcp.git
 cd topic-scope-mcp
-./mvnw -DskipTests install            # builds server/target/topic-scope-server-0.1.0-SNAPSHOT.jar in a few seconds
-docker compose up -d --build --wait   # Kafka on localhost:9092, Mosquitto on localhost:1883, demo data, sample traffic
+./mvnw -DskipTests install                 # server/target/topic-scope-server-0.1.0.jar; a few seconds after the first run
+docker build -t topic-scope-mcp:0.1.0 .    # the image, with the status board's page inside; several minutes the first time
+docker compose up -d --build --wait        # Kafka on localhost:9092, Mosquitto on localhost:1883, demo data, sample traffic
 ```
 
-The first run downloads dependencies and builds the simulator image, which takes a few minutes.
+The first runs download dependencies, which takes a few minutes.
+
+The same program runs in three ways. All of them are described in the [usage guide](docs/usage.md):
+
+| Mode | Start it with | For |
+|---|---|---|
+| MCP over stdin/stdout | nothing extra | an assistant that starts the server itself, on your machine |
+| MCP over HTTP | `--spring.profiles.active=http` and `TOPIC_SCOPE_HTTP_TOKEN` | a client that cannot start a child process, or a shared server. It refuses to start without a token |
+| [Status board](#status-board) | `--spring.profiles.active=board` | watching the brokers on a web page |
 
 ### Connect an MCP client
 
@@ -249,7 +279,7 @@ The server speaks MCP over stdin/stdout: the client starts it as a child process
 
 ```
 command: java
-args:    -jar /absolute/path/to/topic-scope-mcp/server/target/topic-scope-server-0.1.0-SNAPSHOT.jar
+args:    -jar /absolute/path/to/topic-scope-mcp/server/target/topic-scope-server-0.1.0.jar
 ```
 
 For Claude Code, the repository ships a project-level [`.mcp.json`](.mcp.json) with exactly this plus the local stack's look-only login (relative path, so start Claude Code in the repository folder and approve the server when asked). Then ask "which brokers can you see?".
@@ -410,9 +440,22 @@ This repository ships a Claude Code `PreToolUse` hook (`.claude/hooks/block-dang
 
 It is a safety net, not a complete defense. It matches command text and the text being written, so a wrapped or indirect command can slip through, an edit is judged only by its new text, and a harmless line that merely contains a forbidden name can be blocked (a shell command that only *quotes* a forbidden command is refused too). The architecture test in Phase 2 is the check that fails the build.
 
-## Project layout
+## Known limitations
 
-`docs/` holds only the screenshots so far; the usage guide comes with Phase 9.
+- **Only Apache Kafka 4.3 and Mosquitto 2.0 have been tried**, in Docker, on macOS. Other brokers, other versions and Windows have not.
+- **TLS, SCRAM and `ssl://` to brokers are untested against a real broker.** They are passed on to the client libraries as configured. What has been tried is SASL/PLAIN on Kafka and user name with password on MQTT.
+- **Only Claude Code has been tried as an MCP client**, over stdin/stdout. HTTP mode has been tried with the MCP Java SDK's client and with `curl`, not with an assistant.
+- **HTTP mode has one shared token and no encryption.** It is not user authentication. Use it on one machine or behind a reverse proxy that does TLS.
+- **The status board has no login** and is meant for one machine. Its page is checked by eye, not by a browser test.
+- **Redaction is a guess** in both directions. Treat what the tools return as sensitive, and remember that it goes to the AI model your client uses.
+- **On MQTT a deny rule acts on arrival**: a message the broker delivers has been received before it is dropped. On Kafka a denied topic is never fetched.
+- **An MQTT answer is an observation** of a few seconds. A topic that was silent, without a retained message, is not seen by the tools; the board keeps it once it has heard it.
+- **`consumer_lag` judges from a sample.** A consumer that commits less often than the sample is long looks `STALLED`.
+- **"Messages" of a Kafka topic is an upper bound** for compacted topics and topics written with transactions.
+- **The audit log is a plain local file**, not rotated and not tamper-proof.
+- **The server jar is 50 MB and the image about 580 MB**; neither has been slimmed.
+
+## Project layout
 
 ```
 topic-scope-mcp/
@@ -422,13 +465,16 @@ topic-scope-mcp/
 │       ├── mqtt/      # observation window, retained messages, freshness
 │       ├── safety/    # allow/deny lists, redaction, caps
 │       ├── tools/     # the MCP tools and the audit log; thin, no broker code
-│       └── board/     # board mode: the regular picture of the brokers and the WebSocket that pushes it
+│       ├── board/     # board mode: the regular picture of the brokers and the WebSocket that pushes it
+│       └── http/      # HTTP mode: the token every request must carry
 ├── simulator/     # seeds the demo data, then publishes sample traffic; one slow consumer that creates lag on purpose. The only module that publishes
 ├── board/         # the status board's page (React, TypeScript, Vite); fed by the server in board mode
 ├── compose.yaml   # Kafka (KRaft), Mosquitto and the simulator for local use, with accounts
 ├── mosquitto/     # Mosquitto configuration: with accounts for compose (mosquitto.conf, passwd, acl), without for most tests (open.conf)
 ├── kafka/         # a login for Kafka's own command-line tools inside the local stack
-├── docs/          # usage guide (English and Korean), screenshots
+├── Dockerfile     # the server image, for all three modes
+├── docs/          # usage guide (English and Korean), release notes, screenshots
+├── CHANGELOG.md, SECURITY.md
 ├── .claude/
 │   ├── settings.json
 │   ├── hooks/     # blocks dangerous commands, secrets and broker write APIs before they run
@@ -452,11 +498,15 @@ Each phase ends with something that can be run and checked. A phase is done when
 - [x] **Phase 6 — MQTT.** Observation-window topic list, retained and live messages, `topic_freshness`. *Check: a sensor that the simulator silences turns `STALE`.* (Checked by `MqttIT`: a window that covers the moment the sensor stops reports it `STALE`; afterwards it is `SILENT` when named exactly. And by hand against the compose stack.)
 - [x] **Phase 7 — Safety hardening.** Allow and deny lists, audit log, broker logins, a read-only broker account in the local stack. *Check: a publish attempt with the server's account is refused by the broker itself.* (Checked by `SecuredStackIT` for Kafka and MQTT, by `AccessAndAuditIT` for the lists and the log, and by hand against the compose stack.)
 - [x] **Phase 8 — Web status board.** A React page that shows the three views and updates over a WebSocket, served by the server in board mode. *Check: stopping the slow consumer changes the board without a reload.* (Checked in Chrome against the compose stack, see the second screenshot above; and by `BoardIT`, which reads the WebSocket while the consumer is stopped and released.)
-- [ ] **Phase 9 — Release.** Docker image, HTTP transport, usage guide in English and Korean, screenshots, `CHANGELOG.md`, `SECURITY.md`, v0.1.0.
+- [x] **Phase 9 — Release.** Docker image, HTTP transport, usage guide in English and Korean, screenshots, `CHANGELOG.md`, `SECURITY.md`, v0.1.0. *Check: the image runs in all three modes against the local stack; `HttpIT` for HTTP mode.*
+
+What could come next, in no promised order: a published image and jar; a run of the tests in CI; TLS and SCRAM tried against real brokers; a browser test for the board; user accounts for HTTP mode.
 
 ## Contributing
 
 The project is at an early stage. Please open an issue to discuss a change before sending a pull request. All files in this repository are written in English, except the Korean usage guide.
+
+Found a security problem? Please do not open a public issue; see [SECURITY.md](SECURITY.md).
 
 ## License
 
